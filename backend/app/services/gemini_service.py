@@ -58,7 +58,7 @@ Return ONLY valid JSON in this exact format:
 Focus on biochemistry and pre-med level content. Make questions challenging but fair."""
 
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-flash-latest')
 
         response = model.generate_content(
             prompt,
@@ -135,7 +135,7 @@ Return ONLY valid JSON in this exact format:
 Make sure all times are in ISO format and within the free blocks available."""
 
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-flash-latest')
 
         response = model.generate_content(
             prompt,

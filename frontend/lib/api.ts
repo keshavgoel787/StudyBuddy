@@ -52,7 +52,11 @@ export const uploadTextNote = async (text: string, title: string) => {
   formData.append('text', text);
   formData.append('title', title);
 
-  const response = await api.post('/notes/upload', formData);
+  const response = await api.post('/notes/upload', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
   return response.data;
 };
 

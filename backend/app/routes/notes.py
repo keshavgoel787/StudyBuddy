@@ -32,10 +32,13 @@ async def upload_note(
     """
     Upload notes - either as an image file (for OCR) or as plain text.
     """
-    if not file and not text:
+    # Debug logging
+    print(f"DEBUG: file={file}, text={text}, title={title}")
+
+    if not file and (not text or text.strip() == ""):
         raise HTTPException(status_code=400, detail="Either file or text must be provided")
 
-    if file and text:
+    if file and text and text.strip() != "":
         raise HTTPException(status_code=400, detail="Provide either file or text, not both")
 
     try:

@@ -1,4 +1,4 @@
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from typing import List
 from app.schemas.calendar import CalendarEvent, FreeBlock
 
@@ -14,19 +14,22 @@ def calculate_free_blocks(
     """
     if not events:
         # If no events, entire day is free
-        date = datetime.now().date()
-        start_dt = datetime.combine(date, day_start)
-        end_dt = datetime.combine(date, day_end)
+        date = datetime.now(timezone.utc).date()
+        start_dt = datetime.combine(date, day_start, tzinfo=timezone.utc)
+        end_dt = datetime.combine(date, day_end, tzinfo=timezone.utc)
         duration = int((end_dt - start_dt).total_seconds() / 60)
         return [FreeBlock(start=start_dt, end=end_dt, duration_minutes=duration)]
 
     # Sort events by start time
     sorted_events = sorted(events, key=lambda e: e.start)
+
+    # Get the timezone from the first event, or use UTC
+    event_tz = sorted_events[0].start.tzinfo or timezone.utc
     date = sorted_events[0].start.date()
 
     free_blocks = []
-    day_start_dt = datetime.combine(date, day_start)
-    day_end_dt = datetime.combine(date, day_end)
+    day_start_dt = datetime.combine(date, day_start, tzinfo=event_tz)
+    day_end_dt = datetime.combine(date, day_end, tzinfo=event_tz)
 
     # Check for free time before first event
     if sorted_events[0].start > day_start_dt:
