@@ -29,18 +29,26 @@ def get_todays_events(access_token: str, refresh_token: str = None) -> List[Cale
         # Build the Calendar API service
         service = build('calendar', 'v3', credentials=creds)
 
-        # Get today's date range - use local time, not UTC
-        # This prevents timezone issues where tomorrow's events show up today
+        # Get today's date range in EST timezone
+        # Import timezone utilities
+        from zoneinfo import ZoneInfo
         from datetime import date as date_type
-        local_today = date_type.today()
 
-        # Query events that START today (in local time)
-        # Note: We don't append 'Z' to force UTC, which lets calendar times be interpreted correctly
-        today_start = datetime(local_today.year, local_today.month, local_today.day, 0, 0, 0).isoformat() + 'Z'
-        # Add one day for the end
-        tomorrow = local_today.replace(day=local_today.day + 1) if local_today.day < 28 else local_today.replace(month=local_today.month + 1, day=1)
-        tomorrow_start = datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0).isoformat() + 'Z'
-        today_end = tomorrow_start
+        # Define EST timezone
+        est = ZoneInfo("America/New_York")
+
+        # Get today in EST
+        now_est = datetime.now(est)
+        local_today = now_est.date()
+
+        # Create start and end of today in EST, then convert to UTC for Google Calendar API
+        today_start_est = datetime(local_today.year, local_today.month, local_today.day, 0, 0, 0, tzinfo=est)
+        tomorrow = local_today + timedelta(days=1)
+        tomorrow_start_est = datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0, tzinfo=est)
+
+        # Convert to UTC for the API (Google Calendar expects UTC with 'Z' suffix)
+        today_start = today_start_est.astimezone(ZoneInfo("UTC")).isoformat().replace('+00:00', 'Z')
+        today_end = tomorrow_start_est.astimezone(ZoneInfo("UTC")).isoformat().replace('+00:00', 'Z')
 
         # Call the Calendar API
         events_result = service.events().list(
@@ -55,8 +63,6 @@ def get_todays_events(access_token: str, refresh_token: str = None) -> List[Cale
 
         # Convert to CalendarEvent objects
         calendar_events = []
-        from datetime import date as date_type
-        local_today = date_type.today()
 
         for event in events:
             # Handle both dateTime and date (all-day events)
@@ -67,12 +73,16 @@ def get_todays_events(access_token: str, refresh_token: str = None) -> List[Cale
             if 'T' in start:  # dateTime format
                 start_dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
                 end_dt = datetime.fromisoformat(end.replace('Z', '+00:00'))
+
+                # Convert to EST to check the date
+                start_dt_est = start_dt.astimezone(est)
+                event_date = start_dt_est.date()
             else:  # date format (all-day event)
                 start_dt = datetime.fromisoformat(start + 'T00:00:00')
                 end_dt = datetime.fromisoformat(end + 'T23:59:59')
+                event_date = start_dt.date()
 
-            # Filter: only include events that start today (in the event's local timezone)
-            event_date = start_dt.date()
+            # Filter: only include events that start today in EST
             if event_date != local_today:
                 continue  # Skip events not starting today
 
