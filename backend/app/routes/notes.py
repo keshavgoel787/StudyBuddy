@@ -29,31 +29,36 @@ async def get_all_notes(
 ):
     """
     Get all notes for the current user.
+    Optimized with LEFT JOIN to avoid N+1 queries.
     """
-    # Get all notes
-    notes = db.query(NoteDocument).filter(
+    from sqlalchemy import case
+
+    # Single query with LEFT JOIN to get notes and check for study materials
+    results = db.query(
+        NoteDocument.id,
+        NoteDocument.title,
+        NoteDocument.created_at,
+        case(
+            (StudyMaterial.id.isnot(None), True),
+            else_=False
+        ).label('has_study_material')
+    ).outerjoin(
+        StudyMaterial,
+        StudyMaterial.note_document_id == NoteDocument.id
+    ).filter(
         NoteDocument.user_id == current_user.id
     ).order_by(NoteDocument.created_at.desc()).all()
 
-    # Get set of note IDs that have study materials in a single query
-    note_ids_with_materials = set(
-        row[0] for row in db.query(StudyMaterial.note_document_id).filter(
-            StudyMaterial.note_document_id.in_([n.id for n in notes])
-        ).all()
-    )
-
-    # Build response with has_study_material flag
-    result = []
-    for note in notes:
-        note_dict = {
-            "id": note.id,
-            "title": note.title,
-            "created_at": note.created_at,
-            "has_study_material": note.id in note_ids_with_materials
-        }
-        result.append(NoteDocumentResponse(**note_dict))
-
-    return result
+    # Convert to response models
+    return [
+        NoteDocumentResponse(
+            id=row.id,
+            title=row.title,
+            created_at=row.created_at,
+            has_study_material=row.has_study_material
+        )
+        for row in results
+    ]
 
 
 @router.delete("/{note_document_id}")
@@ -109,9 +114,10 @@ async def upload_note(
 
             # Check if it's an image (for OCR)
             if file.content_type and file.content_type.startswith("image/"):
-                # Perform OCR
+                # Perform OCR (async wrapper for blocking Tesseract call)
+                import asyncio
                 full_path = get_file_path(file_url)
-                extracted_text = extract_text_from_image(full_path)
+                extracted_text = await asyncio.to_thread(extract_text_from_image, full_path)
 
                 if not extracted_text:
                     raise HTTPException(status_code=400, detail="No text could be extracted from the image")
@@ -176,9 +182,14 @@ async def generate_study(
                 practice_questions=existing_material.practice_questions
             )
 
-        # Generate new study material using Gemini
+        # Generate new study material using Gemini (async wrapper for blocking call)
+        import asyncio
         topic_hint = request.topic_hint if hasattr(request, 'topic_hint') else None
-        material_data = generate_study_material(note_doc.extracted_text, topic_hint)
+        material_data = await asyncio.to_thread(
+            generate_study_material,
+            note_doc.extracted_text,
+            topic_hint
+        )
 
         # Save to database
         study_material = StudyMaterial(

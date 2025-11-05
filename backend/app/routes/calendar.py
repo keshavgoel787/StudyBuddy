@@ -9,6 +9,7 @@ from app.models.day_plan import DayPlan
 from app.schemas.calendar import TodayResponse, DayPlanResponse
 from app.utils.auth_middleware import get_current_user
 from app.utils.time_utils import calculate_free_blocks
+from app.utils.token_refresh import get_valid_user_token
 from app.services.google_calendar import get_todays_events
 from app.services.gemini_service import generate_day_plan
 
@@ -29,6 +30,9 @@ async def get_today(
 
         if not user_token:
             raise HTTPException(status_code=401, detail="No Google Calendar access. Please sign in again.")
+
+        # Ensure token is valid (refresh if expired)
+        user_token = get_valid_user_token(user_token, db)
 
         # Fetch events from Google Calendar
         events = get_todays_events(user_token.access_token, user_token.refresh_token)
@@ -83,14 +87,23 @@ async def get_day_plan(
         if not user_token:
             raise HTTPException(status_code=401, detail="No Google Calendar access. Please sign in again.")
 
-        # Fetch events from Google Calendar
-        events = get_todays_events(user_token.access_token, user_token.refresh_token)
+        # Ensure token is valid (refresh if expired)
+        user_token = get_valid_user_token(user_token, db)
 
-        # Calculate free blocks
+        # Fetch events from Google Calendar (async wrapper for blocking call)
+        import asyncio
+        events = await asyncio.to_thread(
+            get_todays_events,
+            user_token.access_token,
+            user_token.refresh_token
+        )
+
+        # Calculate free blocks (fast, no need for async)
         free_blocks = calculate_free_blocks(events)
 
-        # Generate AI recommendations
-        recommendations = generate_day_plan(
+        # Generate AI recommendations (async wrapper for blocking Gemini call)
+        recommendations = await asyncio.to_thread(
+            generate_day_plan,
             date=today.strftime("%Y-%m-%d"),
             events=events,
             free_blocks=free_blocks,
