@@ -99,7 +99,12 @@ export default function Dashboard() {
               Hi there! 🌸
             </h1>
             <p className="text-xl text-mauve font-serif italic">
-              Here's your day at a glance
+              {new Date().toLocaleDateString('en-US', {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric'
+              })}
             </p>
           </div>
           <div className="flex gap-3">

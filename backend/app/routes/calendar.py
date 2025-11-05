@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, date
 
 from app.database import get_db
 from app.models.user import User
 from app.models.user_token import UserToken
+from app.models.day_plan import DayPlan
 from app.schemas.calendar import TodayResponse, DayPlanResponse
 from app.utils.auth_middleware import get_current_user
 from app.utils.time_utils import calculate_free_blocks
@@ -48,8 +49,34 @@ async def get_day_plan(
 ):
     """
     Get today's events + AI-generated day plan with recommendations.
+    Uses cached plan if available for today, otherwise generates new one.
     """
     try:
+        today = date.today()
+
+        # Check if we have a cached plan for today
+        cached_plan = db.query(DayPlan).filter(
+            DayPlan.user_id == current_user.id,
+            DayPlan.date == today
+        ).first()
+
+        if cached_plan:
+            # Convert JSON back to Pydantic models
+            from app.schemas.calendar import CalendarEvent, FreeBlock, Recommendations
+
+            events = [CalendarEvent(**event) for event in cached_plan.events]
+            free_blocks = [FreeBlock(**block) for block in cached_plan.free_blocks]
+            recommendations = Recommendations(**cached_plan.recommendations)
+
+            # Return cached plan
+            return DayPlanResponse(
+                date=today.strftime("%Y-%m-%d"),
+                events=events,
+                free_blocks=free_blocks,
+                recommendations=recommendations
+            )
+
+        # No cached plan - generate new one
         # Get user's Google tokens
         user_token = db.query(UserToken).filter(UserToken.user_id == current_user.id).first()
 
@@ -64,18 +91,35 @@ async def get_day_plan(
 
         # Generate AI recommendations
         recommendations = generate_day_plan(
-            date=datetime.now().strftime("%Y-%m-%d"),
+            date=today.strftime("%Y-%m-%d"),
             events=events,
             free_blocks=free_blocks,
             commute_duration_minutes=30
         )
 
+        # Convert Pydantic models to dicts for JSON storage
+        events_dict = [event.model_dump(mode='json') for event in events]
+        free_blocks_dict = [block.model_dump(mode='json') for block in free_blocks]
+        recommendations_dict = recommendations.model_dump(mode='json')
+
+        # Cache the plan
+        day_plan = DayPlan(
+            user_id=current_user.id,
+            date=today,
+            events=events_dict,
+            free_blocks=free_blocks_dict,
+            recommendations=recommendations_dict
+        )
+        db.add(day_plan)
+        db.commit()
+
         return DayPlanResponse(
-            date=datetime.now().strftime("%Y-%m-%d"),
+            date=today.strftime("%Y-%m-%d"),
             events=events,
             free_blocks=free_blocks,
             recommendations=recommendations
         )
 
     except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to generate day plan: {str(e)}")

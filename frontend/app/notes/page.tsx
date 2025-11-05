@@ -12,6 +12,7 @@ interface Note {
   id: string;
   title: string;
   created_at: string;
+  has_study_material: boolean;
 }
 
 export default function NotesLibrary() {
@@ -127,9 +128,16 @@ export default function NotesLibrary() {
               <Card key={note.id} variant="default" className="hover:shadow-xl transition-all">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <h3 className="text-xl font-semibold text-foreground mb-2">
-                      {note.title}
-                    </h3>
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="text-xl font-semibold text-foreground">
+                        {note.title}
+                      </h3>
+                      {note.has_study_material && (
+                        <span className="px-2 py-0.5 text-xs font-medium bg-sage/20 text-sage rounded-full">
+                          ✨ Ready
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 text-sm text-mauve/70">
                       <CalendarIcon className="w-4 h-4" />
                       <span>{formatDate(note.created_at)}</span>

@@ -30,11 +30,30 @@ async def get_all_notes(
     """
     Get all notes for the current user.
     """
+    # Get all notes
     notes = db.query(NoteDocument).filter(
         NoteDocument.user_id == current_user.id
     ).order_by(NoteDocument.created_at.desc()).all()
 
-    return notes
+    # Get set of note IDs that have study materials in a single query
+    note_ids_with_materials = set(
+        row[0] for row in db.query(StudyMaterial.note_document_id).filter(
+            StudyMaterial.note_document_id.in_([n.id for n in notes])
+        ).all()
+    )
+
+    # Build response with has_study_material flag
+    result = []
+    for note in notes:
+        note_dict = {
+            "id": note.id,
+            "title": note.title,
+            "created_at": note.created_at,
+            "has_study_material": note.id in note_ids_with_materials
+        }
+        result.append(NoteDocumentResponse(**note_dict))
+
+    return result
 
 
 @router.delete("/{note_document_id}")
