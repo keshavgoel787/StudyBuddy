@@ -46,6 +46,7 @@ export default function StudyPage() {
   const [loading, setLoading] = useState(false);
   const [textNotes, setTextNotes] = useState('');
   const [noteTitle, setNoteTitle] = useState('');
+  const [topicHint, setTopicHint] = useState('');
   const [studyMaterial, setStudyMaterial] = useState<StudyMaterial | null>(null);
 
   // Flashcard state
@@ -68,7 +69,7 @@ export default function StudyPage() {
       formData.append('title', noteTitle || file.name);
 
       const uploadResult = await uploadNote(formData);
-      const material = await generateStudyMaterial(uploadResult.note_document_id);
+      const material = await generateStudyMaterial(uploadResult.note_document_id, topicHint);
 
       setStudyMaterial(material);
       setView('material');
@@ -92,7 +93,7 @@ export default function StudyPage() {
         textNotes,
         noteTitle || 'My Notes'
       );
-      const material = await generateStudyMaterial(uploadResult.note_document_id);
+      const material = await generateStudyMaterial(uploadResult.note_document_id, topicHint);
 
       setStudyMaterial(material);
       setView('material');
@@ -201,6 +202,22 @@ export default function StudyPage() {
                     placeholder="e.g., Biochem L12 - Enzyme Kinetics"
                     className="w-full px-4 py-3 rounded-xl border-2 border-lavender/30 bg-white/80 focus:border-lavender focus:outline-none"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Topic/Subject (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={topicHint}
+                    onChange={(e) => setTopicHint(e.target.value)}
+                    placeholder="e.g., Physics - 2D Kinematics, Organic Chemistry, etc."
+                    className="w-full px-4 py-3 rounded-xl border-2 border-lavender/30 bg-white/80 focus:border-lavender focus:outline-none"
+                  />
+                  <p className="text-xs text-mauve/70 mt-1">
+                    💡 Helps the AI generate more relevant study materials
+                  </p>
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-4">
@@ -442,6 +459,7 @@ export default function StudyPage() {
                   setStudyMaterial(null);
                   setTextNotes('');
                   setNoteTitle('');
+                  setTopicHint('');
                 }}
                 className="flex-1"
               >

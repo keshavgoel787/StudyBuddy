@@ -60,9 +60,10 @@ export const uploadTextNote = async (text: string, title: string) => {
   return response.data;
 };
 
-export const generateStudyMaterial = async (noteDocumentId: string) => {
+export const generateStudyMaterial = async (noteDocumentId: string, topicHint?: string) => {
   const response = await api.post('/notes/generate-study', {
     note_document_id: noteDocumentId,
+    topic_hint: topicHint || null,
   });
   return response.data;
 };

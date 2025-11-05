@@ -11,9 +11,13 @@ settings = get_settings()
 genai.configure(api_key=settings.gemini_api_key)
 
 
-def generate_study_material(extracted_text: str) -> Dict[str, Any]:
+def generate_study_material(extracted_text: str, topic_hint: str = None) -> Dict[str, Any]:
     """
     Generate study material from extracted notes text using Gemini.
+
+    Args:
+        extracted_text: The notes text to process
+        topic_hint: Optional hint about the topic (e.g., "Physics - 2D Kinematics", "Organic Chemistry")
 
     Returns a dictionary with:
     - summary_short: str
@@ -22,18 +26,25 @@ def generate_study_material(extracted_text: str) -> Dict[str, Any]:
     - practice_questions: List[Dict]
     """
 
-    prompt = f"""You are a helpful study assistant for a 3rd-year pre-med biochemistry student.
+    # Build the prompt with topic awareness
+    topic_context = ""
+    if topic_hint:
+        topic_context = f"\n\nTOPIC HINT: The user indicated this is about: {topic_hint}\nUse this as context, but also analyze the notes to understand the specific concepts covered."
+    else:
+        topic_context = "\n\nFirst, analyze the notes to identify the subject area and main topics covered. Then generate study materials appropriate for that subject."
 
-Given the following notes, generate comprehensive study materials.
+    prompt = f"""You are an intelligent study assistant that helps students master any subject.
+
+Given the following notes, generate comprehensive study materials.{topic_context}
 
 NOTES:
 {extracted_text}
 
 Generate the following in valid JSON format:
 
-1. A short summary (3 sentences or less)
-2. A detailed summary (1-2 paragraphs)
-3. 10-15 flashcards with concise questions and answers
+1. A short summary (3 sentences or less) - identify the main topic and key concepts
+2. A detailed summary (1-2 paragraphs) - comprehensive overview with subject-appropriate terminology
+3. 10-15 flashcards with concise questions and answers relevant to the subject matter
 4. 5-8 multiple choice practice questions with 4 options each, the correct answer index (0-3), and a brief explanation
 
 Return ONLY valid JSON in this exact format:
@@ -55,7 +66,7 @@ Return ONLY valid JSON in this exact format:
   ]
 }}
 
-Focus on biochemistry and pre-med level content. Make questions challenging but fair."""
+Make the questions challenging but fair, appropriate for the academic level and subject area."""
 
     try:
         model = genai.GenerativeModel('gemini-flash-latest')

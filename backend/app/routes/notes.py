@@ -119,7 +119,8 @@ async def generate_study(
             )
 
         # Generate new study material using Gemini
-        material_data = generate_study_material(note_doc.extracted_text)
+        topic_hint = request.topic_hint if hasattr(request, 'topic_hint') else None
+        material_data = generate_study_material(note_doc.extracted_text, topic_hint)
 
         # Save to database
         study_material = StudyMaterial(

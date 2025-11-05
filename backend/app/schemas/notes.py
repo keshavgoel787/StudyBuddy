@@ -30,6 +30,7 @@ class StudyMaterialResponse(BaseModel):
 
 class GenerateStudyRequest(BaseModel):
     note_document_id: UUID
+    topic_hint: Optional[str] = None
 
 
 class TextNoteRequest(BaseModel):
