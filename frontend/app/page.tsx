@@ -33,8 +33,8 @@ export default function Home() {
         <div className="text-center space-y-4">
           <div className="flex items-center justify-center gap-3 mb-4">
             <Sparkles className="w-10 h-10 text-rose" />
-            <h1 className="text-6xl font-bold bg-linear-to-r from-rose via-lavender to-powder-blue bg-clip-text text-transparent">
-              SchoolBuddy
+            <h1 className="text-6xl font-bold bg-linear-to-r from-rose via-lavender to-powder-blue bg-clip-text text-transparent pb-2 leading-tight">
+              StudyBuddy
             </h1>
             <Sparkles className="w-10 h-10 text-lavender" />
           </div>
