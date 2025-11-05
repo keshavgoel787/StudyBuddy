@@ -4,6 +4,16 @@ from datetime import datetime
 from typing import List, Optional
 
 
+class NoteDocumentResponse(BaseModel):
+    id: UUID
+    title: str
+    created_at: datetime
+    has_study_material: bool = False
+
+    class Config:
+        from_attributes = True
+
+
 class NoteUploadResponse(BaseModel):
     note_document_id: UUID
     extracted_text: str

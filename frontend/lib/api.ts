@@ -72,3 +72,13 @@ export const getStudyMaterial = async (noteDocumentId: string) => {
   const response = await api.get(`/notes/${noteDocumentId}/study`);
   return response.data;
 };
+
+export const getAllNotes = async () => {
+  const response = await api.get('/notes/');
+  return response.data;
+};
+
+export const deleteNote = async (noteDocumentId: string) => {
+  const response = await api.delete(`/notes/${noteDocumentId}`);
+  return response.data;
+};

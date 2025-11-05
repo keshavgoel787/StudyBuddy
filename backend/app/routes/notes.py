@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 
 from app.database import get_db
@@ -11,7 +11,8 @@ from app.schemas.notes import (
     NoteUploadResponse,
     StudyMaterialResponse,
     GenerateStudyRequest,
-    TextNoteRequest
+    TextNoteRequest,
+    NoteDocumentResponse
 )
 from app.utils.auth_middleware import get_current_user
 from app.services.storage import save_uploaded_file, get_file_path
@@ -19,6 +20,44 @@ from app.services.ocr_service import extract_text_from_image
 from app.services.gemini_service import generate_study_material
 
 router = APIRouter(prefix="/notes", tags=["notes"])
+
+
+@router.get("/", response_model=List[NoteDocumentResponse])
+async def get_all_notes(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all notes for the current user.
+    """
+    notes = db.query(NoteDocument).filter(
+        NoteDocument.user_id == current_user.id
+    ).order_by(NoteDocument.created_at.desc()).all()
+
+    return notes
+
+
+@router.delete("/{note_document_id}")
+async def delete_note(
+    note_document_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a note document and its associated study materials.
+    """
+    note_doc = db.query(NoteDocument).filter(
+        NoteDocument.id == note_document_id,
+        NoteDocument.user_id == current_user.id
+    ).first()
+
+    if not note_doc:
+        raise HTTPException(status_code=404, detail="Note document not found")
+
+    db.delete(note_doc)
+    db.commit()
+
+    return {"message": "Note deleted successfully"}
 
 
 @router.post("/upload", response_model=NoteUploadResponse)

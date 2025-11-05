@@ -105,10 +105,17 @@ export default function Dashboard() {
           <div className="flex gap-3">
             <Button
               variant="outline"
+              onClick={() => router.push('/notes')}
+            >
+              <BookOpen className="w-4 h-4 mr-2" />
+              My Notes
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => router.push('/study')}
             >
               <BookOpen className="w-4 h-4 mr-2" />
-              Study
+              Upload New
             </Button>
             <Button
               variant="outline"
