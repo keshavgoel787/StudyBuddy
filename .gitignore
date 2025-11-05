@@ -23,3 +23,7 @@ frontend/dist/
 *.swp
 *.swo
 .DS_Store
+
+
+CLAUDE.md 
+.claude
