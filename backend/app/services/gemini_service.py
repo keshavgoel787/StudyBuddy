@@ -279,11 +279,41 @@ def generate_day_plan(
     Returns Recommendations object with lunch slots, study slots, commute suggestion, and summary.
     """
 
-    # Format events for prompt
-    events_text = "\n".join([
+    # Partition events by type
+    assignment_events = [e for e in events if hasattr(e, 'event_type') and e.event_type == "assignment"]
+    commute_events = [e for e in events if hasattr(e, 'event_type') and e.event_type == "commute"]
+    calendar_events = [e for e in events if not hasattr(e, 'event_type') or e.event_type == "calendar"]
+
+    # Format calendar events (classes/meetings)
+    calendar_events_text = "\n".join([
         f"- {e.title}: {e.start.strftime('%I:%M %p')} - {e.end.strftime('%I:%M %p')}"
-        for e in events
-    ])
+        for e in calendar_events
+    ]) if calendar_events else "No fixed calendar events"
+
+    # Format assignment study blocks
+    assignment_events_text = ""
+    if assignment_events:
+        assignment_events_text = "\n\nSCHEDULED ASSIGNMENT STUDY BLOCKS (AI-planned work time):\n"
+        for e in assignment_events:
+            # Extract due date info from description if available
+            due_info = ""
+            if hasattr(e, 'description') and e.description and "in" in e.description and "days" in e.description:
+                # Extract "in X days" from description
+                import re
+                match = re.search(r'in (\d+) days', e.description)
+                if match:
+                    due_info = f" (due in {match.group(1)} days)"
+
+            assignment_events_text += f"- {e.title}: {e.start.strftime('%I:%M %p')} - {e.end.strftime('%I:%M %p')}{due_info}\n"
+
+    # Format commute events
+    commute_events_text = ""
+    if commute_events:
+        commute_events_text = "\n\nCOMMUTE EVENTS:\n"
+        commute_events_text += "\n".join([
+            f"- {e.title}: {e.start.strftime('%I:%M %p')} - {e.end.strftime('%I:%M %p')}"
+            for e in commute_events
+        ])
 
     # Format free blocks
     free_blocks_text = "\n".join([
@@ -307,19 +337,27 @@ def generate_day_plan(
 
 Today is {date}. Here is the student's schedule:
 
-EVENTS:
-{events_text if events_text else "No events scheduled"}
+FIXED CALENDAR EVENTS (classes/meetings):
+{calendar_events_text}{assignment_events_text}{commute_events_text}
 
-FREE TIME BLOCKS:
-{free_blocks_text if free_blocks_text else "Entire day is free"}{bus_info}
+REMAINING FREE TIME BLOCKS:
+{free_blocks_text if free_blocks_text else "No remaining free time"}{bus_info}
+
+IMPORTANT CONTEXT:
+- The "SCHEDULED ASSIGNMENT STUDY BLOCKS" above are AI-generated study times that have ALREADY been planned into the schedule.
+- These are FIXED commitments for working on specific assignments.
+- Treat them as important as classes - the student should follow these planned study times.
+- In your summary, explain WHICH assignment they'll work on and WHEN.
 
 Based on this schedule, recommend:
 1. 1-2 good lunch time windows (30-60 minutes each, ideally between 11 AM - 2 PM)
-2. 1-2 study blocks (60-120 minutes each, when they can focus)
+2. 1-2 additional study blocks ONLY if there is still free time (60-120 minutes each, when they can focus)
 3. A time to leave for commute home (assuming {commute_duration_minutes} minute commute)
 4. A friendly, warm natural language summary of the day and your suggestions.
-   - If bus times are provided, mention them naturally in the summary to help plan their commute.
-   - If no campus events are detected (and no bus schedule), mention that they can stay home/work remotely today and make it sound relaxing and positive.
+   - HIGHLIGHT the planned assignment work times and what they'll be working on
+   - If bus times are provided, mention them naturally in the summary to help plan their commute
+   - If no campus events are detected (and no bus schedule), mention that they can stay home/work remotely today
+   - Prioritize mentioning the assignment blocks - these are the most important structured study time
 
 Return ONLY valid JSON in this exact format:
 {{

@@ -77,6 +77,11 @@ def find_bus_to_campus(
     desired_arrival_dt = target_arrival - timedelta(minutes=buffer_minutes)
     desired_arrival_time = desired_arrival_dt.time()
 
+    import sys
+    print(f"\n[find_bus_to_campus] Target arrival: {target_arrival}", file=sys.stderr)
+    print(f"[find_bus_to_campus] Desired arrival time: {desired_arrival_time}", file=sys.stderr)
+    print(f"[find_bus_to_campus] Day of week: {day_of_week}", file=sys.stderr)
+
     # Query outbound buses for this day
     buses = db.query(BusSchedule).filter(
         BusSchedule.direction == Direction.outbound,
@@ -84,11 +89,18 @@ def find_bus_to_campus(
         BusSchedule.arrival_time <= desired_arrival_time
     ).order_by(BusSchedule.arrival_time.desc()).all()
 
+    print(f"[find_bus_to_campus] Found {len(buses)} buses", file=sys.stderr)
+    if buses:
+        print(f"[find_bus_to_campus] First 3 buses:", file=sys.stderr)
+        for i, bus in enumerate(buses[:3]):
+            print(f"  {i+1}. Depart: {bus.departure_time}, Arrive: {bus.arrival_time}", file=sys.stderr)
+
     if not buses:
         return None
 
     # Get the last bus that arrives before desired time (closest to target)
     best_bus = buses[0]
+    print(f"[find_bus_to_campus] Selected bus: Depart {best_bus.departure_time}, Arrive {best_bus.arrival_time}\n", file=sys.stderr)
 
     # Calculate actual arrival time relative to target
     # Make sure both datetimes have the same timezone awareness
@@ -201,39 +213,57 @@ def get_bus_suggestions_for_day(
     departure_buffer = prefs.departure_buffer_minutes if prefs else 0
 
     # Filter events to only those on campus
-    # Strategy: Explicitly identify remote/online events and exclude them
-    campus_keywords = ["class", "lecture", "lab", "office hours", "session", "workshop", "seminar", "study", "exam", "test", "quiz", "tutoring", "mentorship"]
+    # Strategy: Include events with physical locations, exclude remote/online events
     campus_location_keywords = ["udc", "campus", "student hold", "university", "building", "room"]
     remote_indicators = ["zoom.us", "http://", "https://", "meet.google", "teams.microsoft", "online", "virtual", "remote"]
+    remote_title_keywords = ["online", "virtual", "zoom", "remote"]
 
+    import sys
     campus_events = []
     for e in events:
-        # First check if event is explicitly remote/online
-        is_remote = False
+        print(f"[Campus detection] Event: {e.title}", file=sys.stderr)
+        print(f"  Location: {e.location}", file=sys.stderr)
+
+        # Check if title suggests it's remote
+        title_is_remote = any(keyword in e.title.lower() for keyword in remote_title_keywords)
+
+        # Check if event is explicitly remote/online via location
+        location_is_remote = False
         if e.location:
             location_lower = e.location.lower()
-            # If location contains a URL or remote indicator, it's remote
-            is_remote = any(indicator in location_lower for indicator in remote_indicators)
+            location_is_remote = any(indicator in location_lower for indicator in remote_indicators)
+
+        is_remote = location_is_remote or title_is_remote
+
+        print(f"  Is remote: {is_remote} (location: {location_is_remote}, title: {title_is_remote})", file=sys.stderr)
 
         # Skip remote events entirely
         if is_remote:
+            print(f"  SKIPPED (remote)", file=sys.stderr)
             continue
 
         # Check if event has explicit campus location
         has_campus_location = e.location and any(loc in e.location.lower() for loc in campus_location_keywords)
 
-        # Check if title contains campus keywords
-        has_campus_keyword = any(keyword in e.title.lower() for keyword in campus_keywords)
+        # If event has ANY location (not None/empty) and it's not remote, assume it's on campus
+        has_physical_location = e.location and len(e.location.strip()) > 0
 
         # Check if title explicitly mentions campus location
         title_mentions_campus = any(loc in e.title.lower() for loc in campus_location_keywords)
 
+        print(f"  Has campus location keyword: {has_campus_location}", file=sys.stderr)
+        print(f"  Has physical location: {has_physical_location}", file=sys.stderr)
+        print(f"  Title mentions campus: {title_mentions_campus}", file=sys.stderr)
+
         # Include if:
-        # 1. Has campus location in location field, OR
-        # 2. Has campus keyword in title, OR
+        # 1. Has campus location keyword in location field, OR
+        # 2. Has ANY physical location (room number, building, etc), OR
         # 3. Title mentions campus location
-        if has_campus_location or has_campus_keyword or title_mentions_campus:
+        if has_campus_location or has_physical_location or title_mentions_campus:
+            print(f"  INCLUDED as campus event", file=sys.stderr)
             campus_events.append(e)
+        else:
+            print(f"  EXCLUDED (no location or campus indicators)", file=sys.stderr)
 
     # If no campus events, no bus suggestions needed
     if not campus_events:

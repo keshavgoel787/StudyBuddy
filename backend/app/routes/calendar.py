@@ -7,6 +7,7 @@ from app.models.user import User
 from app.models.user_token import UserToken
 from app.models.day_plan import DayPlan
 from app.models.user_bus_preferences import UserBusPreferences
+from app.models.assignment import Assignment
 from app.schemas.calendar import DayPlanResponse
 from app.schemas.bus import BusPreferencesUpdate, BusPreferencesResponse
 from app.utils.auth_middleware import get_current_user
@@ -15,6 +16,7 @@ from app.utils.token_refresh import get_valid_user_token
 from app.services.google_calendar import get_todays_events
 from app.services.gemini_service import generate_day_plan
 from app.services.bus_service import get_bus_suggestions_for_day, get_all_buses_for_day
+from app.services.assignment_scheduler import schedule_assignments_for_today
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
@@ -80,17 +82,56 @@ async def get_day_plan(
         # Calculate free blocks (fast, no need for async)
         free_blocks = calculate_free_blocks(events)
 
+        # Fetch incomplete assignments for current user
+        assignments = db.query(Assignment).filter(
+            Assignment.user_id == current_user.id,
+            Assignment.completed == False,
+        ).all()
+
+        # Schedule assignment blocks for today
+        assignment_events = schedule_assignments_for_today(
+            today=today,
+            events=events,
+            free_blocks=free_blocks,
+            assignments=assignments,
+        )
+
+        # Merge assignment events into main events list
+        events.extend(assignment_events)
+        # Resort by start time
+        events = sorted(events, key=lambda e: e.start)
+
+        # Recompute free_blocks after adding assignment blocks
+        free_blocks = calculate_free_blocks(events)
+
         # Get bus suggestions based on events
+        import sys
         try:
+            print("\n" + "="*80, file=sys.stderr)
+            print(f"DEBUG: Getting bus suggestions for {len(events)} events", file=sys.stderr)
+            for e in events:
+                print(f"  - {e.title}: {e.start}", file=sys.stderr)
+
             morning_bus, evening_bus = get_bus_suggestions_for_day(
                 db=db,
                 user_id=str(current_user.id),
                 date=today,
                 events=events
             )
+
+            if morning_bus:
+                print(f"DEBUG: Morning bus - Depart: {morning_bus.departure_time}, Arrive: {morning_bus.arrival_time}", file=sys.stderr)
+            else:
+                print(f"DEBUG: No morning bus found", file=sys.stderr)
+
+            if evening_bus:
+                print(f"DEBUG: Evening bus - Depart: {evening_bus.departure_time}, Arrive: {evening_bus.arrival_time}", file=sys.stderr)
+            else:
+                print(f"DEBUG: No evening bus found", file=sys.stderr)
+            print("="*80 + "\n", file=sys.stderr)
         except Exception as bus_error:
-            print(f"ERROR in get_bus_suggestions_for_day: {bus_error}")
-            print(f"Events: {[(e.title, e.start, e.start.tzinfo) for e in events]}")
+            print(f"ERROR in get_bus_suggestions_for_day: {bus_error}", file=sys.stderr)
+            print(f"Events: {[(e.title, e.start, e.start.tzinfo) for e in events]}", file=sys.stderr)
             raise
 
         # Convert bus suggestions to dict format

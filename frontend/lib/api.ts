@@ -104,3 +104,64 @@ export const deleteNote = async (noteDocumentId: string) => {
 export const invalidateNotesCache = () => {
   apiCache.invalidatePattern(/^notes:/);
 };
+
+// Assignments
+export interface AssignmentCreate {
+  title: string;
+  description?: string;
+  due_date: string; // ISO datetime string
+  estimated_hours?: number;
+  priority?: number; // 1=low, 2=medium, 3=high
+}
+
+export interface AssignmentUpdate {
+  title?: string;
+  description?: string;
+  due_date?: string;
+  estimated_hours?: number;
+  priority?: number;
+  completed?: boolean;
+}
+
+export interface Assignment {
+  id: number;
+  user_id: string;
+  title: string;
+  description?: string;
+  due_date: string;
+  estimated_hours: number;
+  priority: number;
+  completed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export const getAssignments = async (includeCompleted: boolean = false): Promise<Assignment[]> => {
+  // Cache assignments for 2 minutes
+  return withCache(`assignments:${includeCompleted}`, async () => {
+    const response = await api.get('/assignments', {
+      params: { include_completed: includeCompleted }
+    });
+    return response.data;
+  }, 2 * 60 * 1000);
+};
+
+export const createAssignment = async (assignment: AssignmentCreate): Promise<Assignment> => {
+  const response = await api.post('/assignments', assignment);
+  // Invalidate cache after creation
+  apiCache.invalidatePattern(/^assignments:/);
+  return response.data;
+};
+
+export const updateAssignment = async (id: number, update: AssignmentUpdate): Promise<Assignment> => {
+  const response = await api.patch(`/assignments/${id}`, update);
+  // Invalidate cache after update
+  apiCache.invalidatePattern(/^assignments:/);
+  return response.data;
+};
+
+export const deleteAssignment = async (id: number): Promise<void> => {
+  await api.delete(`/assignments/${id}`);
+  // Invalidate cache after deletion
+  apiCache.invalidatePattern(/^assignments:/);
+};

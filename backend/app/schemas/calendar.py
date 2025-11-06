@@ -9,6 +9,8 @@ class CalendarEvent(BaseModel):
     location: Optional[str] = None
     start: datetime
     end: datetime
+    description: Optional[str] = None
+    event_type: str = "calendar"  # "calendar" | "commute" | "assignment"
 
 
 class FreeBlock(BaseModel):
