@@ -271,7 +271,9 @@ def generate_day_plan(
     free_blocks: List[FreeBlock],
     commute_duration_minutes: int = 30,
     morning_bus_time: str = None,
-    evening_bus_time: str = None
+    evening_bus_time: str = None,
+    planning_mode: str = None,
+    planning_reason: str = None
 ) -> Recommendations:
     """
     Generate day plan recommendations using Gemini AI.
@@ -348,6 +350,12 @@ IMPORTANT CONTEXT:
 - These are FIXED commitments for working on specific assignments.
 - Treat them as important as classes - the student should follow these planned study times.
 - In your summary, explain WHICH assignment they'll work on and WHEN.
+{f'''
+PLANNING MODE FOR TODAY: {planning_mode}
+- The planning agent has set today's intensity to {planning_mode} mode.
+- Reason: {planning_reason}
+- Explain this decision naturally in your summary (e.g., "Today is a LIGHT study day to preserve rest time" or "HIGH intensity mode - exam is approaching").
+''' if planning_mode and planning_reason else ""}
 
 Based on this schedule, recommend:
 1. 1-2 good lunch time windows (30-60 minutes each, ideally between 11 AM - 2 PM)

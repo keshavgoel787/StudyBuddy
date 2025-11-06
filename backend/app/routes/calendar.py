@@ -17,6 +17,7 @@ from app.services.google_calendar import get_todays_events
 from app.services.gemini_service import generate_day_plan
 from app.services.bus_service import get_bus_suggestions_for_day, get_all_buses_for_day
 from app.services.assignment_scheduler import schedule_assignments_for_today
+from app.services.planning_agent import agent_filter_schedule_for_today
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
@@ -88,16 +89,16 @@ async def get_day_plan(
             Assignment.completed == False,
         ).all()
 
-        # Schedule assignment blocks for today
-        assignment_events = schedule_assignments_for_today(
+        # Use planning agent to intelligently schedule assignment blocks
+        kept_assignment_blocks, agent_decision = agent_filter_schedule_for_today(
             today=today,
             events=events,
             free_blocks=free_blocks,
             assignments=assignments,
         )
 
-        # Merge assignment events into main events list
-        events.extend(assignment_events)
+        # Merge only kept assignment blocks into main events list
+        events.extend(kept_assignment_blocks)
         # Resort by start time
         events = sorted(events, key=lambda e: e.start)
 
@@ -157,7 +158,9 @@ async def get_day_plan(
             free_blocks=free_blocks,
             commute_duration_minutes=30,
             morning_bus_time=morning_bus_time,
-            evening_bus_time=evening_bus_time
+            evening_bus_time=evening_bus_time,
+            planning_mode=agent_decision.mode,
+            planning_reason=agent_decision.reason
         )
 
         # Add bus suggestions to recommendations

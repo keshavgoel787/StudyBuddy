@@ -19,14 +19,16 @@ MIN_BLOCK_MINUTES = 30         # don't create tiny 10min blocks
 LOOKAHEAD_DAYS = 7             # for later multi-day logic
 
 
-def schedule_assignments_for_today(
+def propose_assignment_blocks_for_today(
     today: date,
     events: List[CalendarEvent],
     free_blocks: List[FreeBlock],
     assignments: List[Assignment],
 ) -> List[CalendarEvent]:
     """
-    Schedule assignment study blocks for today based on free time.
+    Deterministically proposes assignment study blocks for today, but does NOT
+    write anything to the DB or cache.
+    All returned events have event_type="assignment" and a unique id.
 
     Args:
         today: The date to schedule for
@@ -35,7 +37,7 @@ def schedule_assignments_for_today(
         assignments: List of user's assignments
 
     Returns:
-        List of new CalendarEvent objects with event_type="assignment"
+        List of proposed CalendarEvent objects with event_type="assignment"
     """
     print(f"\n[Scheduler] Starting assignment scheduling for {today}", file=sys.stderr)
     print(f"[Scheduler] Free blocks: {len(free_blocks)}", file=sys.stderr)
@@ -77,6 +79,7 @@ def schedule_assignments_for_today(
 
     # Step 4: Iterate through assignments and place blocks
     assignment_events = []
+    block_counter = {}  # Track block index per assignment
 
     for assignment in eligible_assignments:
         # Decide how many hours to schedule for this assignment today
@@ -99,6 +102,7 @@ def schedule_assignments_for_today(
 
         # Step 5: Place study blocks into free blocks
         remaining_hours = hours_for_this_assignment_today
+        block_counter[assignment.id] = 0  # Initialize counter for this assignment
 
         for free_block in sorted(free_blocks, key=lambda b: b.start):
             if remaining_hours <= 0:
@@ -145,7 +149,7 @@ def schedule_assignments_for_today(
                 days_until_due = (assignment.due_date.date() - today).days
 
                 assignment_event = CalendarEvent(
-                    id=f"assignment-{assignment.id}-{uuid.uuid4().hex[:8]}",
+                    id=f"assignment-{assignment.id}-{block_counter[assignment.id]}",
                     title=f"Work on {assignment.title}",
                     start=block_start,
                     end=block_end,
@@ -153,6 +157,7 @@ def schedule_assignments_for_today(
                     description=f"Auto-scheduled study block for assignment due {assignment.due_date.isoformat()} (in {days_until_due} days)",
                     event_type="assignment"
                 )
+                block_counter[assignment.id] += 1
 
                 assignment_events.append(assignment_event)
 
@@ -174,3 +179,16 @@ def schedule_assignments_for_today(
     print(f"\n[Scheduler] Created {len(assignment_events)} assignment blocks totaling {sum((e.end - e.start).total_seconds() / 3600 for e in assignment_events):.1f}h", file=sys.stderr)
 
     return assignment_events
+
+
+def schedule_assignments_for_today(
+    today: date,
+    events: List[CalendarEvent],
+    free_blocks: List[FreeBlock],
+    assignments: List[Assignment],
+) -> List[CalendarEvent]:
+    """
+    Wrapper function for backwards compatibility.
+    Calls propose_assignment_blocks_for_today and returns the result.
+    """
+    return propose_assignment_blocks_for_today(today, events, free_blocks, assignments)

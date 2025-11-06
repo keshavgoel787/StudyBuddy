@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.config import get_settings
-from app.routes import auth, calendar, notes, assignments
+from app.routes import auth, calendar, notes, assignments, planner
 from app.utils.rate_limiter import limiter
 
 settings = get_settings()
@@ -32,6 +32,7 @@ app.include_router(auth.router)
 app.include_router(calendar.router)
 app.include_router(notes.router)
 app.include_router(assignments.router)
+app.include_router(planner.router)
 
 
 @app.get("/health")
@@ -40,7 +41,7 @@ async def health_check():
     return {
         "status": "healthy",
         "database": "connected",
-        "services": ["auth", "calendar", "notes", "assignments"]
+        "services": ["auth", "calendar", "notes", "assignments", "planner"]
     }
 
 
