@@ -6,7 +6,7 @@ from app.database import get_db
 from app.models.user import User
 from app.models.user_token import UserToken
 from app.models.day_plan import DayPlan
-from app.schemas.calendar import TodayResponse, DayPlanResponse
+from app.schemas.calendar import DayPlanResponse
 from app.utils.auth_middleware import get_current_user
 from app.utils.time_utils import calculate_free_blocks
 from app.utils.token_refresh import get_valid_user_token
@@ -14,36 +14,6 @@ from app.services.google_calendar import get_todays_events
 from app.services.gemini_service import generate_day_plan
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
-
-
-@router.get("/today", response_model=TodayResponse)
-async def get_today(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Get today's calendar events from Google Calendar.
-    """
-    try:
-        # Get user's Google tokens
-        user_token = db.query(UserToken).filter(UserToken.user_id == current_user.id).first()
-
-        if not user_token:
-            raise HTTPException(status_code=401, detail="No Google Calendar access. Please sign in again.")
-
-        # Ensure token is valid (refresh if expired)
-        user_token = get_valid_user_token(user_token, db)
-
-        # Fetch events from Google Calendar
-        events = get_todays_events(user_token.access_token, user_token.refresh_token)
-
-        return TodayResponse(
-            date=datetime.now().strftime("%Y-%m-%d"),
-            events=events
-        )
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch calendar: {str(e)}")
 
 
 @router.get("/day-plan", response_model=DayPlanResponse)

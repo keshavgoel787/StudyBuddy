@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from uuid import UUID
@@ -11,10 +11,10 @@ from app.schemas.notes import (
     NoteUploadResponse,
     StudyMaterialResponse,
     GenerateStudyRequest,
-    TextNoteRequest,
     NoteDocumentResponse
 )
 from app.utils.auth_middleware import get_current_user
+from app.utils.rate_limiter import limiter
 from app.services.storage import save_uploaded_file, get_file_path
 from app.services.ocr_service import extract_text_from_image
 from app.services.gemini_service import generate_study_material
@@ -95,9 +95,6 @@ async def upload_note(
     """
     Upload notes - either as an image file (for OCR) or as plain text.
     """
-    # Debug logging
-    print(f"DEBUG: file={file}, text={text}, title={title}")
-
     if not file and (not text or text.strip() == ""):
         raise HTTPException(status_code=400, detail="Either file or text must be provided")
 
@@ -119,8 +116,11 @@ async def upload_note(
                 full_path = get_file_path(file_url)
                 extracted_text = await asyncio.to_thread(extract_text_from_image, full_path)
 
-                if not extracted_text:
-                    raise HTTPException(status_code=400, detail="No text could be extracted from the image")
+                if not extracted_text or len(extracted_text.strip()) < 10:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="No meaningful text could be extracted from the image. Please ensure the image is clear and contains readable text."
+                    )
             else:
                 raise HTTPException(status_code=400, detail="Only image files are supported for upload")
 
@@ -150,18 +150,21 @@ async def upload_note(
 
 
 @router.post("/generate-study", response_model=StudyMaterialResponse)
+@limiter.limit("10/hour")  # Limit to 10 generations per hour per user
 async def generate_study(
-    request: GenerateStudyRequest,
+    request: Request,
+    body: GenerateStudyRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Generate study material (summaries, flashcards, practice questions) from a note document.
+    Rate limited to prevent API abuse (10 requests per hour).
     """
     try:
         # Get note document
         note_doc = db.query(NoteDocument).filter(
-            NoteDocument.id == request.note_document_id,
+            NoteDocument.id == body.note_document_id,
             NoteDocument.user_id == current_user.id
         ).first()
 
@@ -184,7 +187,7 @@ async def generate_study(
 
         # Generate new study material using Gemini (async wrapper for blocking call)
         import asyncio
-        topic_hint = request.topic_hint if hasattr(request, 'topic_hint') else None
+        topic_hint = body.topic_hint if hasattr(body, 'topic_hint') else None
         material_data = await asyncio.to_thread(
             generate_study_material,
             note_doc.extracted_text,
@@ -210,8 +213,14 @@ async def generate_study(
             practice_questions=study_material.practice_questions
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
+        # Log the full error for debugging
+        import traceback
+        print(f"ERROR in generate_study: {str(e)}")
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to generate study material: {str(e)}")
 
 

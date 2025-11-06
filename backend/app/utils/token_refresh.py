@@ -22,13 +22,20 @@ def is_token_expired(user_token: UserToken) -> bool:
     Returns:
         True if token is expired or expiring within 5 minutes
     """
-    if not user_token.expires_at:
+    if not user_token.token_expiry:
         # No expiry info - assume expired to be safe
         return True
 
     # Add 5 minute buffer before actual expiry
     buffer = timedelta(minutes=5)
-    return datetime.utcnow() + buffer >= user_token.expires_at
+    now = datetime.utcnow()
+
+    # Make token_expiry timezone-naive if it's timezone-aware
+    expiry = user_token.token_expiry
+    if expiry.tzinfo is not None:
+        expiry = expiry.replace(tzinfo=None)
+
+    return now + buffer >= expiry
 
 
 def refresh_access_token(user_token: UserToken, db: Session) -> UserToken:
@@ -64,7 +71,7 @@ def refresh_access_token(user_token: UserToken, db: Session) -> UserToken:
         # Update database
         user_token.access_token = creds.token
         if creds.expiry:
-            user_token.expires_at = creds.expiry
+            user_token.token_expiry = creds.expiry
 
         db.commit()
         db.refresh(user_token)

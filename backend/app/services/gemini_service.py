@@ -26,6 +26,10 @@ def generate_study_material(extracted_text: str, topic_hint: str = None) -> Dict
     - practice_questions: List[Dict]
     """
 
+    # Validate input
+    if not extracted_text or len(extracted_text.strip()) < 10:
+        raise Exception("Extracted text is too short or empty. Need at least 10 characters.")
+
     # Build the prompt with topic awareness
     topic_context = ""
     if topic_hint:
@@ -69,7 +73,7 @@ Return ONLY valid JSON in this exact format:
 Make the questions challenging but fair, appropriate for the academic level and subject area."""
 
     try:
-        model = genai.GenerativeModel('gemini-flash-latest')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         response = model.generate_content(
             prompt,
@@ -81,8 +85,17 @@ Make the questions challenging but fair, appropriate for the academic level and 
 
         # Parse JSON response
         result = json.loads(response.text)
+
+        # Validate response structure
+        required_keys = ["summary_short", "summary_detailed", "flashcards", "practice_questions"]
+        for key in required_keys:
+            if key not in result:
+                raise Exception(f"Gemini response missing required field: {key}")
+
         return result
 
+    except json.JSONDecodeError as e:
+        raise Exception(f"Failed to parse Gemini response as JSON: {str(e)}")
     except Exception as e:
         raise Exception(f"Gemini API call failed: {str(e)}")
 

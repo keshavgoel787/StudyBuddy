@@ -11,11 +11,6 @@ class CalendarEvent(BaseModel):
     end: datetime
 
 
-class TodayResponse(BaseModel):
-    date: str
-    events: List[CalendarEvent]
-
-
 class FreeBlock(BaseModel):
     start: datetime
     end: datetime
