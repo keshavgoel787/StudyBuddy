@@ -5,6 +5,7 @@ from typing import List, Dict, Any
 from datetime import datetime
 from app.config import get_settings
 from app.schemas.calendar import CalendarEvent, FreeBlock, TimeSlot, CommuteSuggestion, Recommendations
+from app.services.prompt_builder import build_day_plan_prompt
 
 settings = get_settings()
 
@@ -281,109 +282,16 @@ def generate_day_plan(
     Returns Recommendations object with lunch slots, study slots, commute suggestion, and summary.
     """
 
-    # Partition events by type
-    assignment_events = [e for e in events if hasattr(e, 'event_type') and e.event_type == "assignment"]
-    commute_events = [e for e in events if hasattr(e, 'event_type') and e.event_type == "commute"]
-    calendar_events = [e for e in events if not hasattr(e, 'event_type') or e.event_type == "calendar"]
-
-    # Format calendar events (classes/meetings)
-    calendar_events_text = "\n".join([
-        f"- {e.title}: {e.start.strftime('%I:%M %p')} - {e.end.strftime('%I:%M %p')}"
-        for e in calendar_events
-    ]) if calendar_events else "No fixed calendar events"
-
-    # Format assignment study blocks
-    assignment_events_text = ""
-    if assignment_events:
-        assignment_events_text = "\n\nSCHEDULED ASSIGNMENT STUDY BLOCKS (AI-planned work time):\n"
-        for e in assignment_events:
-            # Extract due date info from description if available
-            due_info = ""
-            if hasattr(e, 'description') and e.description and "in" in e.description and "days" in e.description:
-                # Extract "in X days" from description
-                import re
-                match = re.search(r'in (\d+) days', e.description)
-                if match:
-                    due_info = f" (due in {match.group(1)} days)"
-
-            assignment_events_text += f"- {e.title}: {e.start.strftime('%I:%M %p')} - {e.end.strftime('%I:%M %p')}{due_info}\n"
-
-    # Format commute events
-    commute_events_text = ""
-    if commute_events:
-        commute_events_text = "\n\nCOMMUTE EVENTS:\n"
-        commute_events_text += "\n".join([
-            f"- {e.title}: {e.start.strftime('%I:%M %p')} - {e.end.strftime('%I:%M %p')}"
-            for e in commute_events
-        ])
-
-    # Format free blocks
-    free_blocks_text = "\n".join([
-        f"- {fb.start.strftime('%I:%M %p')} - {fb.end.strftime('%I:%M %p')} ({fb.duration_minutes} min)"
-        for fb in free_blocks
-    ])
-
-    # Format bus information for prompt
-    bus_info = ""
-    has_bus_suggestions = morning_bus_time or evening_bus_time
-    if has_bus_suggestions:
-        bus_info = "\n\nBUS SCHEDULE:"
-        if morning_bus_time:
-            bus_info += f"\n- Morning bus to campus: {morning_bus_time}"
-        if evening_bus_time:
-            bus_info += f"\n- Evening bus from campus: {evening_bus_time}"
-    else:
-        bus_info = "\n\nNOTE: No campus events detected today - all events appear to be remote or at home, so no bus schedule needed."
-
-    prompt = f"""You are a helpful personal assistant for a busy pre-med student.
-
-Today is {date}. Here is the student's schedule:
-
-FIXED CALENDAR EVENTS (classes/meetings):
-{calendar_events_text}{assignment_events_text}{commute_events_text}
-
-REMAINING FREE TIME BLOCKS:
-{free_blocks_text if free_blocks_text else "No remaining free time"}{bus_info}
-
-IMPORTANT CONTEXT:
-- The "SCHEDULED ASSIGNMENT STUDY BLOCKS" above are AI-generated study times that have ALREADY been planned into the schedule.
-- These are FIXED commitments for working on specific assignments.
-- Treat them as important as classes - the student should follow these planned study times.
-- In your summary, explain WHICH assignment they'll work on and WHEN.
-{f'''
-PLANNING MODE FOR TODAY: {planning_mode}
-- The planning agent has set today's intensity to {planning_mode} mode.
-- Reason: {planning_reason}
-- Explain this decision naturally in your summary (e.g., "Today is a LIGHT study day to preserve rest time" or "HIGH intensity mode - exam is approaching").
-''' if planning_mode and planning_reason else ""}
-
-Based on this schedule, recommend:
-1. 1-2 good lunch time windows (30-60 minutes each, ideally between 11 AM - 2 PM)
-2. 1-2 additional study blocks ONLY if there is still free time (60-120 minutes each, when they can focus)
-3. A time to leave for commute home (assuming {commute_duration_minutes} minute commute)
-4. A friendly, warm natural language summary of the day and your suggestions.
-   - HIGHLIGHT the planned assignment work times and what they'll be working on
-   - If bus times are provided, mention them naturally in the summary to help plan their commute
-   - If no campus events are detected (and no bus schedule), mention that they can stay home/work remotely today
-   - Prioritize mentioning the assignment blocks - these are the most important structured study time
-
-Return ONLY valid JSON in this exact format:
-{{
-  "lunch_slots": [
-    {{"start": "2025-11-08T12:00:00", "end": "2025-11-08T13:00:00", "label": "12:00 PM - 1:00 PM"}}
-  ],
-  "study_slots": [
-    {{"start": "2025-11-08T15:00:00", "end": "2025-11-08T17:00:00", "label": "3:00 PM - 5:00 PM"}}
-  ],
-  "commute_suggestion": {{
-    "leave_by": "2025-11-08T19:30:00",
-    "leave_by_label": "7:30 PM",
-    "reason": "To get home by 8:00 PM"
-  }},
-  "summary": "Natural language summary of the day and recommendations"
-}}
-
-Make sure all times are in ISO format and within the free blocks available."""
+    # Build optimized prompt using modular builder
+    prompt = build_day_plan_prompt(
+        date=date,
+        events=events,
+        free_blocks=free_blocks,
+        morning_bus_time=morning_bus_time,
+        evening_bus_time=evening_bus_time,
+        planning_mode=planning_mode,
+        planning_reason=planning_reason
+    )
 
     try:
         model = genai.GenerativeModel('gemini-flash-latest')

@@ -11,13 +11,10 @@ from app.models.assignment import Assignment
 from app.schemas.calendar import DayPlanResponse
 from app.schemas.bus import BusPreferencesUpdate, BusPreferencesResponse
 from app.utils.auth_middleware import get_current_user
-from app.utils.time_utils import calculate_free_blocks
 from app.utils.token_refresh import get_valid_user_token
 from app.services.google_calendar import get_todays_events
-from app.services.gemini_service import generate_day_plan
-from app.services.bus_service import get_bus_suggestions_for_day, get_all_buses_for_day
-from app.services.assignment_scheduler import schedule_assignments_for_today
-from app.services.planning_agent import agent_filter_schedule_for_today
+from app.services.bus_service import get_all_buses_for_day
+from app.services.day_plan_orchestrator import orchestrate_day_plan
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
@@ -80,91 +77,21 @@ async def get_day_plan(
             user_token.refresh_token
         )
 
-        # Calculate free blocks (fast, no need for async)
-        free_blocks = calculate_free_blocks(events)
-
-        # Fetch incomplete assignments for current user
+        # Fetch incomplete assignments
         assignments = db.query(Assignment).filter(
             Assignment.user_id == current_user.id,
             Assignment.completed == False,
         ).all()
 
-        # Use planning agent to intelligently schedule assignment blocks
-        kept_assignment_blocks, agent_decision = agent_filter_schedule_for_today(
+        # Orchestrate entire day plan generation (efficient, modular)
+        events, free_blocks, recommendations = await asyncio.to_thread(
+            orchestrate_day_plan,
+            db=db,
+            user_id=str(current_user.id),
             today=today,
             events=events,
-            free_blocks=free_blocks,
             assignments=assignments,
         )
-
-        # Merge only kept assignment blocks into main events list
-        events.extend(kept_assignment_blocks)
-        # Resort by start time
-        events = sorted(events, key=lambda e: e.start)
-
-        # Recompute free_blocks after adding assignment blocks
-        free_blocks = calculate_free_blocks(events)
-
-        # Get bus suggestions based on events
-        import sys
-        try:
-            print("\n" + "="*80, file=sys.stderr)
-            print(f"DEBUG: Getting bus suggestions for {len(events)} events", file=sys.stderr)
-            for e in events:
-                print(f"  - {e.title}: {e.start}", file=sys.stderr)
-
-            morning_bus, evening_bus = get_bus_suggestions_for_day(
-                db=db,
-                user_id=str(current_user.id),
-                date=today,
-                events=events
-            )
-
-            if morning_bus:
-                print(f"DEBUG: Morning bus - Depart: {morning_bus.departure_time}, Arrive: {morning_bus.arrival_time}", file=sys.stderr)
-            else:
-                print(f"DEBUG: No morning bus found", file=sys.stderr)
-
-            if evening_bus:
-                print(f"DEBUG: Evening bus - Depart: {evening_bus.departure_time}, Arrive: {evening_bus.arrival_time}", file=sys.stderr)
-            else:
-                print(f"DEBUG: No evening bus found", file=sys.stderr)
-            print("="*80 + "\n", file=sys.stderr)
-        except Exception as bus_error:
-            print(f"ERROR in get_bus_suggestions_for_day: {bus_error}", file=sys.stderr)
-            print(f"Events: {[(e.title, e.start, e.start.tzinfo) for e in events]}", file=sys.stderr)
-            raise
-
-        # Convert bus suggestions to dict format
-        bus_suggestions = {}
-        if morning_bus:
-            bus_suggestions["morning"] = morning_bus.to_dict(today)
-        if evening_bus:
-            bus_suggestions["evening"] = evening_bus.to_dict(today)
-
-        # Format bus times for AI summary
-        morning_bus_time = None
-        evening_bus_time = None
-        if morning_bus:
-            morning_bus_time = f"{morning_bus.departure_time.strftime('%I:%M %p')} (arrives {morning_bus.arrival_time.strftime('%I:%M %p')})"
-        if evening_bus:
-            evening_bus_time = f"{evening_bus.departure_time.strftime('%I:%M %p')} (arrives {evening_bus.arrival_time.strftime('%I:%M %p')})"
-
-        # Generate AI recommendations (async wrapper for blocking Gemini call)
-        recommendations = await asyncio.to_thread(
-            generate_day_plan,
-            date=today.strftime("%Y-%m-%d"),
-            events=events,
-            free_blocks=free_blocks,
-            commute_duration_minutes=30,
-            morning_bus_time=morning_bus_time,
-            evening_bus_time=evening_bus_time,
-            planning_mode=agent_decision.mode,
-            planning_reason=agent_decision.reason
-        )
-
-        # Add bus suggestions to recommendations
-        recommendations.bus_suggestions = bus_suggestions if bus_suggestions else None
 
         # Convert Pydantic models to dicts for JSON storage
         events_dict = [event.model_dump(mode='json') for event in events]

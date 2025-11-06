@@ -159,84 +159,44 @@ def agent_filter_schedule_for_today(
 
 
 def build_planning_prompt(context: DayContext, candidate_blocks: List[CalendarEvent]) -> str:
-    """Build the prompt for Gemini to make planning decisions."""
+    """Build concise prompt for Gemini planning decisions."""
 
-    # Format candidate blocks
-    blocks_text = ""
+    # Compact block formatting
+    blocks_list = []
     for block in candidate_blocks:
-        # Extract assignment title from block title ("Work on X" -> "X")
-        assignment_title = block.title.replace("Work on ", "")
+        import re
+        due_days = ""
+        if match := re.search(r'in (\d+) days', block.description):
+            due_days = f", due in {match.group(1)}d"
 
-        # Extract due date info from description
-        due_info = ""
-        if "in" in block.description and "days" in block.description:
-            import re
-            match = re.search(r'in (\d+) days', block.description)
-            if match:
-                due_info = f"due in {match.group(1)} days"
+        blocks_list.append(
+            f"{block.id}: {block.start.strftime('%I:%M%p')}-{block.end.strftime('%I:%M%p')}{due_days}"
+        )
 
-        blocks_text += f"- ID: {block.id}\n"
-        blocks_text += f"  Title: {block.title}\n"
-        blocks_text += f"  Time: {block.start.strftime('%I:%M %p')} - {block.end.strftime('%I:%M %p')}\n"
-        blocks_text += f"  Assignment: {assignment_title} ({due_info})\n\n"
+    # Compact assignments formatting
+    assignments_list = [
+        f"{a['title']} (due {a['due_in_days']}d, {a['estimated_hours']}h, P{a['priority']})"
+        for a in context.assignments_summary
+    ]
 
-    # Format assignments summary
-    assignments_text = ""
-    for a in context.assignments_summary:
-        assignments_text += f"- {a['title']}: due in {a['due_in_days']} days, est. {a['estimated_hours']}h (priority {a['priority']})\n"
+    prompt = f"""Study planner for pre-med student. Balance productivity + rest.
 
-    prompt = f"""You are an intelligent study planning assistant. Your job is to help a pre-med student maintain a healthy balance between productivity and rest.
+**Context ({context.date})**
+Awake: {context.total_awake_hours:.0f}h | If all blocks applied → Busy: {context.total_busy_hours:.0f}h, Study: {context.total_study_hours_if_applied:.0f}h, Free: {context.free_hours_if_applied:.0f}h
+Exam <2d: {"YES" if context.has_exam_within_2_days else "NO"} | Next exam: {context.days_until_next_exam if context.days_until_next_exam else "none"}d
 
-## Today's Context ({context.date})
+**Assignments:** {", ".join(assignments_list) if assignments_list else "None"}
 
-**Time Breakdown:**
-- Total awake hours: {context.total_awake_hours:.1f}h ({8} AM - {23} PM)
-- If all proposed blocks are kept:
-  - Busy hours: {context.total_busy_hours:.1f}h
-  - Study hours: {context.total_study_hours_if_applied:.1f}h
-  - Free hours: {context.free_hours_if_applied:.1f}h
+**Proposed Blocks:** {" | ".join(blocks_list) if blocks_list else "None"}
 
-**Urgency Factors:**
-- Exam within 2 days: {"YES" if context.has_exam_within_2_days else "NO"}
-- Days until next exam: {context.days_until_next_exam if context.days_until_next_exam is not None else "none scheduled"}
+**Modes:** OFF(0h), LIGHT(0-1h), NORMAL(1-3h), HIGH(3-5h exam prep)
+**Rules:** Keep ≥{MIN_FREE_HOURS_PER_DAY}h free (unless exam), prioritize urgent, avoid overload
 
-**Assignments:**
-{assignments_text if assignments_text else "No assignments"}
-
-**Proposed Study Blocks:**
-{blocks_text}
-
-## Your Task
-
-Decide which blocks to keep for today based on these guidelines:
-
-**Intensity Modes:**
-- **OFF** (0h): No study blocks. Use when day is already full or student needs rest.
-- **LIGHT** (0-1h): Minimal study. Use for low-urgency days or when free time is limited.
-- **NORMAL** (1-3h): Balanced study. Default for typical days with moderate deadlines.
-- **HIGH** (3-5h): Intensive study. Only when exam ≤2 days or critical deadline very soon.
-
-**Rules:**
-1. **Preserve free time**: Keep at least {MIN_FREE_HOURS_PER_DAY}h free unless exam is within 2 days
-2. **Prioritize urgency**: Focus on assignments due soonest
-3. **Don't overload**: It's better to drop blocks than to overwhelm the student
-4. **Be realistic**: If today is already packed, suggest OFF or LIGHT mode
-5. **Consider energy**: Morning/afternoon blocks are generally better than late night
-
-## Response Format
-
-Return JSON with:
-- `mode`: One of "OFF", "LIGHT", "NORMAL", "HIGH"
-- `kept_block_ids`: Array of block IDs to keep (empty array = no blocks)
-- `reason`: 1-2 sentence explanation of your decision
-
-Example:
+Return JSON:
 {{
-  "mode": "LIGHT",
-  "kept_block_ids": ["assignment-1-0"],
-  "reason": "Day is already busy with classes. Keeping one morning block for the assignment due tomorrow, dropping others to preserve evening free time."
-}}
-
-Make your decision now:"""
+  "mode": "OFF"|"LIGHT"|"NORMAL"|"HIGH",
+  "kept_block_ids": ["id1", "id2"],
+  "reason": "Brief explanation"
+}}"""
 
     return prompt
