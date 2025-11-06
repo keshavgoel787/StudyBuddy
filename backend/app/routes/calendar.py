@@ -10,10 +10,17 @@ from app.models.user_bus_preferences import UserBusPreferences
 from app.models.assignment import Assignment
 from app.schemas.calendar import DayPlanResponse
 from app.schemas.bus import BusPreferencesUpdate, BusPreferencesResponse
+from app.schemas.events import (
+    EventCreate, EventCreateResponse,
+    SyncAssignmentBlockRequest, SyncBusRequest
+)
 from app.utils.auth_middleware import get_current_user
 from app.utils.token_refresh import get_valid_user_token
 from app.utils.cache import cleanup_old_day_plans
-from app.services.google_calendar import get_todays_events
+from app.services.google_calendar import (
+    get_todays_events, create_calendar_event,
+    create_assignment_block_event, create_bus_event
+)
 from app.services.bus_service import get_all_buses_for_day
 from app.services.day_plan_orchestrator import orchestrate_day_plan
 
@@ -226,3 +233,147 @@ async def update_bus_preferences(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update bus preferences: {str(e)}")
+
+
+@router.post("/events/create", response_model=EventCreateResponse)
+async def create_event(
+    event: EventCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Create a custom event in Google Calendar.
+
+    This allows users to add any event directly from the dashboard.
+    """
+    try:
+        # Get user's Google tokens
+        user_token = db.query(UserToken).filter(UserToken.user_id == current_user.id).first()
+
+        if not user_token:
+            raise HTTPException(status_code=401, detail="No Google Calendar access. Please sign in again.")
+
+        # Ensure token is valid
+        user_token = get_valid_user_token(user_token, db)
+
+        # Create the event
+        event_id = create_calendar_event(
+            access_token=user_token.access_token,
+            title=event.title,
+            start_time=event.start_time,
+            end_time=event.end_time,
+            description=event.description,
+            location=event.location,
+            color_id=event.color_id,
+            refresh_token=user_token.refresh_token
+        )
+
+        return EventCreateResponse(
+            event_id=event_id,
+            message=f"Event '{event.title}' created successfully"
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create event: {str(e)}")
+
+
+@router.post("/events/sync-assignment-block", response_model=EventCreateResponse)
+async def sync_assignment_block(
+    request: SyncAssignmentBlockRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Sync an assignment study block to Google Calendar.
+
+    Creates a purple study block event with assignment details.
+    """
+    try:
+        # Get user's Google tokens
+        user_token = db.query(UserToken).filter(UserToken.user_id == current_user.id).first()
+
+        if not user_token:
+            raise HTTPException(status_code=401, detail="No Google Calendar access. Please sign in again.")
+
+        # Ensure token is valid
+        user_token = get_valid_user_token(user_token, db)
+
+        # Get assignment details
+        assignment = db.query(Assignment).filter(
+            Assignment.id == request.assignment_id,
+            Assignment.user_id == current_user.id
+        ).first()
+
+        if not assignment:
+            raise HTTPException(status_code=404, detail="Assignment not found")
+
+        # Create the event
+        event_id = create_assignment_block_event(
+            access_token=user_token.access_token,
+            assignment_title=assignment.title,
+            start_time=request.start_time,
+            end_time=request.end_time,
+            due_date=assignment.due_date,
+            refresh_token=user_token.refresh_token
+        )
+
+        return EventCreateResponse(
+            event_id=event_id,
+            message=f"Study block for '{assignment.title}' added to calendar"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to sync assignment block: {str(e)}")
+
+
+@router.post("/events/sync-bus", response_model=EventCreateResponse)
+async def sync_bus(
+    request: SyncBusRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Sync a bus suggestion to Google Calendar.
+
+    Creates a blue commute event with bus details.
+    """
+    try:
+        # Get user's Google tokens
+        user_token = db.query(UserToken).filter(UserToken.user_id == current_user.id).first()
+
+        if not user_token:
+            raise HTTPException(status_code=401, detail="No Google Calendar access. Please sign in again.")
+
+        # Ensure token is valid
+        user_token = get_valid_user_token(user_token, db)
+
+        # Determine locations based on direction
+        if request.direction == "outbound":
+            departure_location = "Main & Murray"
+            arrival_location = "UDC"
+        else:
+            departure_location = "UDC"
+            arrival_location = "Main & Murray"
+
+        # Create the event
+        event_id = create_bus_event(
+            access_token=user_token.access_token,
+            direction=request.direction,
+            departure_time=request.departure_time,
+            arrival_time=request.arrival_time,
+            departure_location=departure_location,
+            arrival_location=arrival_location,
+            refresh_token=user_token.refresh_token
+        )
+
+        return EventCreateResponse(
+            event_id=event_id,
+            message=f"Bus event added to calendar"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to sync bus: {str(e)}")
