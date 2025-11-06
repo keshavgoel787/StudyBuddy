@@ -7,6 +7,7 @@ from app.models.user import User
 from app.models.assignment import Assignment
 from app.schemas.assignment import AssignmentCreate, AssignmentUpdate, AssignmentResponse
 from app.utils.auth_middleware import get_current_user
+from app.utils.cache import invalidate_day_plan_cache
 
 router = APIRouter(prefix="/assignments", tags=["assignments"])
 
@@ -60,6 +61,10 @@ async def create_assignment(
         db.commit()
         db.refresh(db_assignment)
 
+        # Invalidate day plan cache since assignments changed
+        invalidate_day_plan_cache(db, current_user.id)
+        db.commit()
+
         return db_assignment
 
     except Exception as e:
@@ -96,6 +101,10 @@ async def update_assignment(
         db.commit()
         db.refresh(db_assignment)
 
+        # Invalidate day plan cache since assignments changed
+        invalidate_day_plan_cache(db, current_user.id)
+        db.commit()
+
         return db_assignment
 
     except HTTPException:
@@ -126,6 +135,10 @@ async def delete_assignment(
             raise HTTPException(status_code=404, detail="Assignment not found")
 
         db.delete(db_assignment)
+        db.commit()
+
+        # Invalidate day plan cache since assignments changed
+        invalidate_day_plan_cache(db, current_user.id)
         db.commit()
 
         return None

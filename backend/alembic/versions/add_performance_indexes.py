@@ -43,12 +43,36 @@ def upgrade():
         "CREATE INDEX IF NOT EXISTS ix_user_tokens_user_id ON user_tokens (user_id)"
     ))
 
+    # Add composite index on assignments for common filtering pattern
+    # Query pattern: WHERE user_id = ? AND completed = False ORDER BY due_date
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_assignments_user_completed_due ON assignments (user_id, completed, due_date)"
+    ))
+
+    # Add composite index on bus_schedules for direction + day lookups
+    # Query pattern: WHERE direction = ? AND day_of_week = ? AND (arrival_time/departure_time comparison)
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_bus_schedules_direction_day_arrival ON bus_schedules (direction, day_of_week, arrival_time)"
+    ))
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_bus_schedules_direction_day_departure ON bus_schedules (direction, day_of_week, departure_time)"
+    ))
+
+    # Add index on user_bus_preferences.user_id for faster lookups
+    conn.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_user_bus_preferences_user_id ON user_bus_preferences (user_id)"
+    ))
+
 
 def downgrade():
     # Only drop if exists
     from sqlalchemy import text
     conn = op.get_bind()
 
+    conn.execute(text("DROP INDEX IF EXISTS ix_user_bus_preferences_user_id"))
+    conn.execute(text("DROP INDEX IF EXISTS ix_bus_schedules_direction_day_departure"))
+    conn.execute(text("DROP INDEX IF EXISTS ix_bus_schedules_direction_day_arrival"))
+    conn.execute(text("DROP INDEX IF EXISTS ix_assignments_user_completed_due"))
     conn.execute(text("DROP INDEX IF EXISTS ix_user_tokens_user_id"))
     conn.execute(text("DROP INDEX IF EXISTS ix_study_material_note_document_id"))
     conn.execute(text("DROP INDEX IF EXISTS ix_day_plans_user_date"))

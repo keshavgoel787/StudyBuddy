@@ -6,6 +6,7 @@ from datetime import datetime
 from app.config import get_settings
 from app.schemas.calendar import CalendarEvent, FreeBlock, TimeSlot, CommuteSuggestion, Recommendations
 from app.services.prompt_builder import build_day_plan_prompt
+from app.utils.logger import log_error, log_debug
 
 settings = get_settings()
 
@@ -229,14 +230,13 @@ Make the questions challenging but fair, appropriate for the academic level and 
             response_text = response.text
         except (TypeError, AttributeError, ValueError) as e:
             # If response.text fails, try to extract from parts directly
-            print(f"ERROR: Cannot access response.text: {str(e)}")
-            print(f"Response object: {response}")
+            log_error("gemini_service", "Cannot access response.text", e)
             if response.candidates and response.candidates[0].content.parts:
                 try:
                     response_text = response.candidates[0].content.parts[0].text
-                    print(f"Successfully extracted text from parts: {len(response_text)} chars")
+                    log_debug("gemini_service", "Extracted text from parts", chars=len(response_text))
                 except Exception as parts_error:
-                    print(f"ERROR: Cannot extract text from parts: {str(parts_error)}")
+                    log_error("gemini_service", "Cannot extract text from parts", parts_error)
                     raise Exception(f"Cannot extract text from Gemini response. Original error: {str(e)}")
             else:
                 raise Exception(f"Gemini response has no valid content. Error: {str(e)}")
@@ -246,9 +246,10 @@ Make the questions challenging but fair, appropriate for the academic level and 
             result = parse_gemini_json_response(response_text)
         except Exception as parse_error:
             # Log the full response for debugging
-            print(f"ERROR: Failed to parse Gemini response")
-            print(f"Response length: {len(response_text)} chars")
-            print(f"Response preview: {response_text[:1000]}")
+            log_error("gemini_service", "Failed to parse Gemini response", parse_error)
+            log_debug("gemini_service", "Response preview",
+                     length=len(response_text),
+                     preview=response_text[:1000])
             raise Exception(f"Failed to parse Gemini response as JSON: {str(parse_error)}")
 
         # Validate response structure
@@ -328,13 +329,14 @@ def generate_day_plan(
             response_text = response.text
         except (TypeError, AttributeError, ValueError) as e:
             # If response.text fails, try to extract from parts directly
-            print(f"ERROR: Cannot access response.text: {str(e)}")
+            log_error("gemini_service", "Cannot access response.text in generate_day_plan", e)
             if response.candidates and response.candidates[0].content.parts:
                 try:
                     response_text = response.candidates[0].content.parts[0].text
-                    print(f"Successfully extracted text from parts: {len(response_text)} chars")
+                    log_debug("gemini_service", "Extracted text from parts in generate_day_plan",
+                             chars=len(response_text))
                 except Exception as parts_error:
-                    print(f"ERROR: Cannot extract text from parts: {str(parts_error)}")
+                    log_error("gemini_service", "Cannot extract text from parts in generate_day_plan", parts_error)
                     raise Exception(f"Cannot extract text from Gemini response. Original error: {str(e)}")
             else:
                 raise Exception(f"Gemini response has no valid content. Error: {str(e)}")

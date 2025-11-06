@@ -5,10 +5,10 @@ Service for scheduling assignments into the calendar.
 from datetime import datetime, date, time, timedelta
 from typing import List
 import uuid
-import sys
 
 from app.schemas.calendar import CalendarEvent, FreeBlock
 from app.models.assignment import Assignment
+from app.utils.logger import log_info, log_debug
 
 # Configuration constants
 DAY_START_HOUR = 8   # 08:00
@@ -39,9 +39,10 @@ def propose_assignment_blocks_for_today(
     Returns:
         List of proposed CalendarEvent objects with event_type="assignment"
     """
-    print(f"\n[Scheduler] Starting assignment scheduling for {today}", file=sys.stderr)
-    print(f"[Scheduler] Free blocks: {len(free_blocks)}", file=sys.stderr)
-    print(f"[Scheduler] Total assignments: {len(assignments)}", file=sys.stderr)
+    log_info("assignment_scheduler", "Starting assignment scheduling",
+            date=str(today),
+            free_blocks=len(free_blocks),
+            total_assignments=len(assignments))
 
     # Step 1: Filter to incomplete assignments that are due >= today
     today_midnight = datetime.combine(today, time.min)
@@ -55,18 +56,19 @@ def propose_assignment_blocks_for_today(
         if not a.completed and a.due_date >= today_midnight
     ]
 
-    print(f"[Scheduler] Eligible assignments (incomplete, not overdue): {len(eligible_assignments)}", file=sys.stderr)
+    log_debug("assignment_scheduler", "Eligible assignments found",
+             eligible=len(eligible_assignments))
 
     if not eligible_assignments:
-        print(f"[Scheduler] No eligible assignments to schedule", file=sys.stderr)
+        log_info("assignment_scheduler", "No eligible assignments to schedule")
         return []
 
     # Step 2: Sort assignments by due_date ascending, then priority descending
     eligible_assignments.sort(key=lambda a: (a.due_date, -a.priority))
 
-    print(f"[Scheduler] Sorted assignments:", file=sys.stderr)
-    for a in eligible_assignments[:3]:
-        print(f"  - {a.title} (due {a.due_date}, priority {a.priority}, {a.estimated_hours}h)", file=sys.stderr)
+    log_debug("assignment_scheduler", "Top 3 sorted assignments",
+             assignments=[f"{a.title} (due {a.due_date}, P{a.priority}, {a.estimated_hours}h)"
+                         for a in eligible_assignments[:3]])
 
     # Step 3: Calculate how many hours already scheduled today
     already_scheduled_hours = sum(
@@ -75,7 +77,8 @@ def propose_assignment_blocks_for_today(
         if hasattr(e, 'event_type') and e.event_type == "assignment"
     )
 
-    print(f"[Scheduler] Already scheduled assignment hours today: {already_scheduled_hours:.1f}h", file=sys.stderr)
+    log_debug("assignment_scheduler", "Already scheduled hours",
+             hours=f"{already_scheduled_hours:.1f}h")
 
     # Step 4: Iterate through assignments and place blocks
     assignment_events = []
@@ -86,7 +89,8 @@ def propose_assignment_blocks_for_today(
         hours_available_today = MAX_STUDY_HOURS_PER_DAY - already_scheduled_hours
 
         if hours_available_today <= 0:
-            print(f"[Scheduler] Hit max study hours ({MAX_STUDY_HOURS_PER_DAY}h), stopping", file=sys.stderr)
+            log_debug("assignment_scheduler", "Hit max study hours, stopping",
+                     max_hours=MAX_STUDY_HOURS_PER_DAY)
             break
 
         hours_for_this_assignment_today = min(
@@ -98,7 +102,9 @@ def propose_assignment_blocks_for_today(
         if hours_for_this_assignment_today <= 0:
             continue
 
-        print(f"\n[Scheduler] Scheduling {hours_for_this_assignment_today:.1f}h for '{assignment.title}'", file=sys.stderr)
+        log_debug("assignment_scheduler", "Scheduling assignment",
+                 title=assignment.title,
+                 hours=f"{hours_for_this_assignment_today:.1f}h")
 
         # Step 5: Place study blocks into free blocks
         remaining_hours = hours_for_this_assignment_today
@@ -161,7 +167,9 @@ def propose_assignment_blocks_for_today(
 
                 assignment_events.append(assignment_event)
 
-                print(f"[Scheduler]   Added block: {block_start.strftime('%I:%M %p')} - {block_end.strftime('%I:%M %p')} ({block_hours:.1f}h)", file=sys.stderr)
+                log_debug("assignment_scheduler", "Added block",
+                         time=f"{block_start.strftime('%I:%M %p')}-{block_end.strftime('%I:%M %p')}",
+                         hours=f"{block_hours:.1f}h")
 
                 # Move cursor and update counters
                 cursor = block_end
@@ -170,13 +178,16 @@ def propose_assignment_blocks_for_today(
 
                 # Check if we've hit the daily max
                 if already_scheduled_hours >= MAX_STUDY_HOURS_PER_DAY:
-                    print(f"[Scheduler] Hit max study hours while placing blocks", file=sys.stderr)
+                    log_debug("assignment_scheduler", "Hit max hours while placing blocks")
                     break
 
             if already_scheduled_hours >= MAX_STUDY_HOURS_PER_DAY:
                 break
 
-    print(f"\n[Scheduler] Created {len(assignment_events)} assignment blocks totaling {sum((e.end - e.start).total_seconds() / 3600 for e in assignment_events):.1f}h", file=sys.stderr)
+    total_hours = sum((e.end - e.start).total_seconds() / 3600 for e in assignment_events)
+    log_info("assignment_scheduler", "Created assignment blocks",
+            blocks=len(assignment_events),
+            total_hours=f"{total_hours:.1f}h")
 
     return assignment_events
 

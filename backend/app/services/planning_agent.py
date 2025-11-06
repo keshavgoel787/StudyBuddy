@@ -6,7 +6,6 @@ from datetime import date
 from typing import List, Tuple
 from pydantic import BaseModel
 import json
-import sys
 
 import google.generativeai as genai
 from app.config import get_settings
@@ -14,6 +13,7 @@ from app.schemas.calendar import CalendarEvent, FreeBlock
 from app.models.assignment import Assignment
 from app.services.assignment_scheduler import propose_assignment_blocks_for_today
 from app.services.day_context import build_day_context, DayContext
+from app.utils.logger import log_info, log_error, log_debug
 
 settings = get_settings()
 genai.configure(api_key=settings.gemini_api_key)
@@ -58,7 +58,7 @@ def agent_filter_schedule_for_today(
     if exams is None:
         exams = []
 
-    print(f"\n[Planning Agent] Starting intelligent scheduling for {today}", file=sys.stderr)
+    log_info("planning_agent", "Starting intelligent scheduling", date=str(today))
 
     # Step 1: Propose candidate blocks
     candidate_blocks = propose_assignment_blocks_for_today(
@@ -68,10 +68,10 @@ def agent_filter_schedule_for_today(
         assignments=assignments,
     )
 
-    print(f"[Planning Agent] Scheduler proposed {len(candidate_blocks)} blocks", file=sys.stderr)
+    log_info("planning_agent", "Scheduler proposed blocks", count=len(candidate_blocks))
 
     if not candidate_blocks:
-        print(f"[Planning Agent] No blocks proposed, returning empty schedule", file=sys.stderr)
+        log_info("planning_agent", "No blocks proposed, returning empty schedule")
         return [], AgentDecision(
             mode="OFF",
             kept_block_ids=[],
@@ -87,12 +87,12 @@ def agent_filter_schedule_for_today(
         exams=exams,
     )
 
-    print(f"[Planning Agent] Day Context:", file=sys.stderr)
-    print(f"  - Total awake hours: {context.total_awake_hours:.1f}h", file=sys.stderr)
-    print(f"  - Busy hours (if applied): {context.total_busy_hours:.1f}h", file=sys.stderr)
-    print(f"  - Study hours (if applied): {context.total_study_hours_if_applied:.1f}h", file=sys.stderr)
-    print(f"  - Free hours (if applied): {context.free_hours_if_applied:.1f}h", file=sys.stderr)
-    print(f"  - Exam within 2 days: {context.has_exam_within_2_days}", file=sys.stderr)
+    log_debug("planning_agent", "Day context built",
+             awake_hours=f"{context.total_awake_hours:.1f}h",
+             busy_hours=f"{context.total_busy_hours:.1f}h",
+             study_hours=f"{context.total_study_hours_if_applied:.1f}h",
+             free_hours=f"{context.free_hours_if_applied:.1f}h",
+             exam_within_2d=context.has_exam_within_2_days)
 
     # Step 3: Build prompt for Gemini
     prompt = build_planning_prompt(context, candidate_blocks)
@@ -137,11 +137,13 @@ def agent_filter_schedule_for_today(
 
         decision = AgentDecision(**result)
 
-        print(f"[Planning Agent] Decision: mode={decision.mode}, keeping {len(decision.kept_block_ids)} blocks", file=sys.stderr)
-        print(f"[Planning Agent] Reason: {decision.reason}", file=sys.stderr)
+        log_info("planning_agent", "Decision made",
+                mode=decision.mode,
+                kept_blocks=len(decision.kept_block_ids),
+                reason=decision.reason)
 
     except Exception as e:
-        print(f"[Planning Agent] ERROR calling Gemini: {str(e)}", file=sys.stderr)
+        log_error("planning_agent", "Gemini call failed", e)
         # Fallback: keep all blocks in NORMAL mode
         decision = AgentDecision(
             mode="NORMAL",
@@ -153,7 +155,7 @@ def agent_filter_schedule_for_today(
     kept_ids = set(decision.kept_block_ids)
     kept_blocks = [b for b in candidate_blocks if b.id and b.id in kept_ids]
 
-    print(f"[Planning Agent] Returning {len(kept_blocks)} kept blocks\n", file=sys.stderr)
+    log_info("planning_agent", "Returning kept blocks", count=len(kept_blocks))
 
     return kept_blocks, decision
 

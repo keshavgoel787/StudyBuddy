@@ -12,6 +12,7 @@ from app.schemas.calendar import DayPlanResponse
 from app.schemas.bus import BusPreferencesUpdate, BusPreferencesResponse
 from app.utils.auth_middleware import get_current_user
 from app.utils.token_refresh import get_valid_user_token
+from app.utils.cache import cleanup_old_day_plans
 from app.services.google_calendar import get_todays_events
 from app.services.bus_service import get_all_buses_for_day
 from app.services.day_plan_orchestrator import orchestrate_day_plan
@@ -34,6 +35,11 @@ async def get_day_plan(
     """
     try:
         today = date.today()
+
+        # Opportunistic cleanup: Remove day plans older than 7 days (run in background)
+        # This prevents database bloat without impacting response time
+        import asyncio
+        asyncio.create_task(asyncio.to_thread(cleanup_old_day_plans, db, days_to_keep=7))
 
         # Check if we have a cached plan for today (skip if force_refresh is True)
         cached_plan = None
