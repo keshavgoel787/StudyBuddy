@@ -30,6 +30,42 @@ def sanitize_text_for_prompt(text: str) -> str:
     return sanitized
 
 
+def fix_invalid_escape_sequences(text: str) -> str:
+    """
+    Fix invalid JSON escape sequences by properly escaping backslashes.
+
+    Args:
+        text: String that may contain invalid escape sequences
+
+    Returns:
+        String with fixed escape sequences
+    """
+    # This pattern finds backslashes followed by characters that aren't valid JSON escapes
+    # Valid JSON escapes are: \" \\ \/ \b \f \n \r \t \uXXXX
+    # We need to escape any backslash that isn't followed by one of these
+
+    result = []
+    i = 0
+    while i < len(text):
+        if text[i] == '\\' and i + 1 < len(text):
+            next_char = text[i + 1]
+            # Check if this is a valid JSON escape sequence
+            if next_char in ('"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'):
+                # Valid escape - keep as is
+                result.append(text[i])
+                result.append(next_char)
+                i += 2
+            else:
+                # Invalid escape - escape the backslash itself
+                result.append('\\\\')
+                i += 1
+        else:
+            result.append(text[i])
+            i += 1
+
+    return ''.join(result)
+
+
 def parse_gemini_json_response(response_text: str) -> Dict[str, Any]:
     """
     Robustly parse JSON from Gemini response, handling various edge cases.
@@ -70,10 +106,23 @@ def parse_gemini_json_response(response_text: str) -> Dict[str, Any]:
     # Strategy 3: Extract JSON from text (find first { to last })
     match = re.search(r'\{.*\}', cleaned, re.DOTALL)
     if match:
+        json_text = match.group(0)
         try:
-            return json.loads(match.group(0))
+            return json.loads(json_text)
         except json.JSONDecodeError:
-            pass
+            # Strategy 4: Fix invalid escape sequences and try again
+            try:
+                fixed_text = fix_invalid_escape_sequences(json_text)
+                return json.loads(fixed_text)
+            except json.JSONDecodeError:
+                pass
+
+    # Strategy 5: Try fixing escape sequences on the original cleaned text
+    try:
+        fixed_text = fix_invalid_escape_sequences(cleaned)
+        return json.loads(fixed_text)
+    except json.JSONDecodeError:
+        pass
 
     # All strategies failed - provide detailed error
     preview = response_text[:500] + ('...' if len(response_text) > 500 else '')
@@ -147,22 +196,58 @@ Make the questions challenging but fair, appropriate for the academic level and 
     try:
         model = genai.GenerativeModel('gemini-flash-latest')
 
+        # Configure safety settings to be more permissive for educational content
+        safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
+
         response = model.generate_content(
             prompt,
             generation_config=genai.GenerationConfig(
                 temperature=0.7,
                 response_mime_type="application/json"
-            )
+            ),
+            safety_settings=safety_settings
         )
+
+        # Check if response was blocked or empty
+        if not response.candidates:
+            raise Exception("Gemini did not return any response. The content may have been blocked by safety filters.")
+
+        # Check for safety ratings that blocked the response
+        candidate = response.candidates[0]
+        if hasattr(candidate, 'finish_reason') and candidate.finish_reason not in [1, 0]:  # 1 = STOP (normal), 0 = UNSPECIFIED
+            finish_reason_name = candidate.finish_reason.name if hasattr(candidate.finish_reason, 'name') else str(candidate.finish_reason)
+            raise Exception(f"Gemini response was blocked. Finish reason: {finish_reason_name}")
+
+        # Safely extract text from response
+        try:
+            response_text = response.text
+        except (TypeError, AttributeError, ValueError) as e:
+            # If response.text fails, try to extract from parts directly
+            print(f"ERROR: Cannot access response.text: {str(e)}")
+            print(f"Response object: {response}")
+            if response.candidates and response.candidates[0].content.parts:
+                try:
+                    response_text = response.candidates[0].content.parts[0].text
+                    print(f"Successfully extracted text from parts: {len(response_text)} chars")
+                except Exception as parts_error:
+                    print(f"ERROR: Cannot extract text from parts: {str(parts_error)}")
+                    raise Exception(f"Cannot extract text from Gemini response. Original error: {str(e)}")
+            else:
+                raise Exception(f"Gemini response has no valid content. Error: {str(e)}")
 
         # Parse JSON response using robust parsing
         try:
-            result = parse_gemini_json_response(response.text)
+            result = parse_gemini_json_response(response_text)
         except Exception as parse_error:
             # Log the full response for debugging
             print(f"ERROR: Failed to parse Gemini response")
-            print(f"Response length: {len(response.text)} chars")
-            print(f"Response preview: {response.text[:1000]}")
+            print(f"Response length: {len(response_text)} chars")
+            print(f"Response preview: {response_text[:1000]}")
             raise Exception(f"Failed to parse Gemini response as JSON: {str(parse_error)}")
 
         # Validate response structure
@@ -175,7 +260,7 @@ Make the questions challenging but fair, appropriate for the academic level and 
 
     except Exception as e:
         # Don't wrap exceptions that are already our custom exceptions
-        if "Failed to parse Gemini response" in str(e) or "Gemini response missing required field" in str(e):
+        if "Failed to parse Gemini response" in str(e) or "Gemini response missing required field" in str(e) or "Gemini" in str(e):
             raise
         raise Exception(f"Gemini API call failed: {str(e)}")
 
@@ -241,16 +326,51 @@ Make sure all times are in ISO format and within the free blocks available."""
     try:
         model = genai.GenerativeModel('gemini-flash-latest')
 
+        # Configure safety settings to be more permissive
+        safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
+
         response = model.generate_content(
             prompt,
             generation_config=genai.GenerationConfig(
                 temperature=0.7,
                 response_mime_type="application/json"
-            )
+            ),
+            safety_settings=safety_settings
         )
 
+        # Check if response was blocked or empty
+        if not response.candidates:
+            raise Exception("Gemini did not return any response. The content may have been blocked by safety filters.")
+
+        # Check for safety ratings that blocked the response
+        candidate = response.candidates[0]
+        if hasattr(candidate, 'finish_reason') and candidate.finish_reason not in [1, 0]:  # 1 = STOP (normal), 0 = UNSPECIFIED
+            finish_reason_name = candidate.finish_reason.name if hasattr(candidate.finish_reason, 'name') else str(candidate.finish_reason)
+            raise Exception(f"Gemini response was blocked. Finish reason: {finish_reason_name}")
+
+        # Safely extract text from response
+        try:
+            response_text = response.text
+        except (TypeError, AttributeError, ValueError) as e:
+            # If response.text fails, try to extract from parts directly
+            print(f"ERROR: Cannot access response.text: {str(e)}")
+            if response.candidates and response.candidates[0].content.parts:
+                try:
+                    response_text = response.candidates[0].content.parts[0].text
+                    print(f"Successfully extracted text from parts: {len(response_text)} chars")
+                except Exception as parts_error:
+                    print(f"ERROR: Cannot extract text from parts: {str(parts_error)}")
+                    raise Exception(f"Cannot extract text from Gemini response. Original error: {str(e)}")
+            else:
+                raise Exception(f"Gemini response has no valid content. Error: {str(e)}")
+
         # Parse JSON response
-        result = json.loads(response.text)
+        result = json.loads(response_text)
 
         # Convert to Pydantic models
         lunch_slots = [TimeSlot(**slot) for slot in result.get("lunch_slots", [])]
@@ -265,4 +385,7 @@ Make sure all times are in ISO format and within the free blocks available."""
         )
 
     except Exception as e:
+        # Don't wrap exceptions that are already our custom exceptions
+        if "Gemini" in str(e):
+            raise
         raise Exception(f"Gemini API call failed: {str(e)}")

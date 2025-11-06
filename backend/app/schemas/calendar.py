@@ -29,10 +29,21 @@ class CommuteSuggestion(BaseModel):
     reason: str
 
 
+class BusSuggestion(BaseModel):
+    direction: str  # "outbound" or "inbound"
+    departure_time: datetime
+    arrival_time: datetime
+    departure_label: str  # e.g., "7:30 AM"
+    arrival_label: str    # e.g., "7:40 AM"
+    reason: str
+    is_late_night: bool = False
+
+
 class Recommendations(BaseModel):
     lunch_slots: List[TimeSlot]
     study_slots: List[TimeSlot]
     commute_suggestion: Optional[CommuteSuggestion]
+    bus_suggestions: Optional[dict] = None  # {"morning": BusSuggestion, "evening": BusSuggestion}
     summary: str
 
 

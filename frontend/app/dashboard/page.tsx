@@ -22,6 +22,16 @@ interface TimeSlot {
   label: string;
 }
 
+interface BusSuggestion {
+  direction: string;
+  departure_time: string;
+  arrival_time: string;
+  departure_label: string;
+  arrival_label: string;
+  reason: string;
+  is_late_night: boolean;
+}
+
 interface Recommendations {
   lunch_slots: TimeSlot[];
   study_slots: TimeSlot[];
@@ -29,6 +39,10 @@ interface Recommendations {
     leave_by: string;
     leave_by_label: string;
     reason: string;
+  };
+  bus_suggestions?: {
+    morning?: BusSuggestion;
+    evening?: BusSuggestion;
   };
   summary: string;
 }
@@ -229,6 +243,90 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+
+        {/* Bus Suggestions */}
+        {recommendations?.bus_suggestions && (
+          recommendations.bus_suggestions.morning || recommendations.bus_suggestions.evening
+        ) && (
+          <Card variant="sage" className="mb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Bus className="w-6 h-6 text-sage" />
+              <h2 className="text-2xl font-semibold">Bus Schedule 🚌</h2>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* Morning Bus */}
+              {recommendations.bus_suggestions.morning && (
+                <div className="p-4 bg-white/50 rounded-xl border border-sage/30">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">🌅</span>
+                    <h3 className="font-semibold text-lg">Morning Bus</h3>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-mauve">Departs Main & Murray:</span>
+                      <span className="font-semibold text-sage">
+                        {recommendations.bus_suggestions.morning.departure_label}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-mauve">Arrives at UDC:</span>
+                      <span className="font-semibold text-sage">
+                        {recommendations.bus_suggestions.morning.arrival_label}
+                      </span>
+                    </div>
+                    <p className="text-sm text-mauve/70 mt-2 italic">
+                      💡 {recommendations.bus_suggestions.morning.reason}
+                    </p>
+                    {recommendations.bus_suggestions.morning.is_late_night && (
+                      <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full mt-2">
+                        🌙 Late Night Bus
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Evening Bus */}
+              {recommendations.bus_suggestions.evening && (
+                <div className="p-4 bg-white/50 rounded-xl border border-sage/30">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">🌆</span>
+                    <h3 className="font-semibold text-lg">Evening Bus</h3>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-mauve">Departs UDC:</span>
+                      <span className="font-semibold text-sage">
+                        {recommendations.bus_suggestions.evening.departure_label}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-mauve">Arrives Main & Murray:</span>
+                      <span className="font-semibold text-sage">
+                        {recommendations.bus_suggestions.evening.arrival_label}
+                      </span>
+                    </div>
+                    <p className="text-sm text-mauve/70 mt-2 italic">
+                      💡 {recommendations.bus_suggestions.evening.reason}
+                    </p>
+                    {recommendations.bus_suggestions.evening.is_late_night && (
+                      <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full mt-2">
+                        🌙 Late Night Bus
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-sm text-blue-800">
+                <strong>📍 Route:</strong> Westside (WS) - Main & Murray ↔ UDC
+              </p>
+            </div>
+          </Card>
+        )}
 
         {/* Quick Actions */}
         <Card className="text-center">
