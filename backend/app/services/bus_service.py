@@ -73,14 +73,15 @@ def find_bus_to_campus(
     if day_of_week > 5:
         return None
 
-    # Calculate the latest acceptable arrival time
-    desired_arrival = (target_arrival - timedelta(minutes=buffer_minutes)).time()
+    # Calculate the latest acceptable arrival time (as datetime for timezone consistency)
+    desired_arrival_dt = target_arrival - timedelta(minutes=buffer_minutes)
+    desired_arrival_time = desired_arrival_dt.time()
 
     # Query outbound buses for this day
     buses = db.query(BusSchedule).filter(
         BusSchedule.direction == Direction.outbound,
         BusSchedule.day_of_week == day_of_week,
-        BusSchedule.arrival_time <= desired_arrival
+        BusSchedule.arrival_time <= desired_arrival_time
     ).order_by(BusSchedule.arrival_time.desc()).all()
 
     if not buses:
@@ -134,14 +135,15 @@ def find_bus_from_campus(
     if day_of_week > 5:
         return None
 
-    # Calculate the earliest acceptable departure time
-    desired_departure = (earliest_departure + timedelta(minutes=buffer_minutes)).time()
+    # Calculate the earliest acceptable departure time (as datetime for timezone consistency)
+    desired_departure_dt = earliest_departure + timedelta(minutes=buffer_minutes)
+    desired_departure_time = desired_departure_dt.time()
 
     # Query inbound buses for this day
     buses = db.query(BusSchedule).filter(
         BusSchedule.direction == Direction.inbound,
         BusSchedule.day_of_week == day_of_week,
-        BusSchedule.departure_time >= desired_departure
+        BusSchedule.departure_time >= desired_departure_time
     ).order_by(BusSchedule.departure_time.asc()).all()
 
     if not buses:
@@ -199,13 +201,24 @@ def get_bus_suggestions_for_day(
     departure_buffer = prefs.departure_buffer_minutes if prefs else 0
 
     # Filter events to only those on campus
-    # Strategy: Include events with campus location OR campus-related keywords
-    # BUT if it has "Student Hold" in the title, it's likely on campus regardless of zoom link
+    # Strategy: Explicitly identify remote/online events and exclude them
     campus_keywords = ["class", "lecture", "lab", "office hours", "session", "workshop", "seminar", "study", "exam", "test", "quiz", "tutoring", "mentorship"]
     campus_location_keywords = ["udc", "campus", "student hold", "university", "building", "room"]
+    remote_indicators = ["zoom.us", "http://", "https://", "meet.google", "teams.microsoft", "online", "virtual", "remote"]
 
     campus_events = []
     for e in events:
+        # First check if event is explicitly remote/online
+        is_remote = False
+        if e.location:
+            location_lower = e.location.lower()
+            # If location contains a URL or remote indicator, it's remote
+            is_remote = any(indicator in location_lower for indicator in remote_indicators)
+
+        # Skip remote events entirely
+        if is_remote:
+            continue
+
         # Check if event has explicit campus location
         has_campus_location = e.location and any(loc in e.location.lower() for loc in campus_location_keywords)
 

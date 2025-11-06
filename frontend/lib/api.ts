@@ -28,8 +28,17 @@ export const initiateGoogleAuth = () => {
 };
 
 // Calendar
-export const getDayPlan = async () => {
-  // Cache for 30 minutes (day plan is expensive to generate)
+export const getDayPlan = async (forceRefresh: boolean = false) => {
+  // If force refresh, invalidate cache and bypass it
+  if (forceRefresh) {
+    apiCache.invalidate('calendar:day-plan');
+    const response = await api.get('/calendar/day-plan', {
+      params: { force_refresh: true }
+    });
+    return response.data;
+  }
+
+  // Otherwise use cache (30 minutes)
   return withCache('calendar:day-plan', async () => {
     const response = await api.get('/calendar/day-plan');
     return response.data;

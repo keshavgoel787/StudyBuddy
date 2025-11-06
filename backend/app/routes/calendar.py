@@ -21,21 +21,27 @@ router = APIRouter(prefix="/calendar", tags=["calendar"])
 
 @router.get("/day-plan", response_model=DayPlanResponse)
 async def get_day_plan(
+    force_refresh: bool = False,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Get today's events + AI-generated day plan with recommendations.
     Uses cached plan if available for today, otherwise generates new one.
+
+    Query params:
+    - force_refresh: Set to true to bypass cache and regenerate plan
     """
     try:
         today = date.today()
 
-        # Check if we have a cached plan for today
-        cached_plan = db.query(DayPlan).filter(
-            DayPlan.user_id == current_user.id,
-            DayPlan.date == today
-        ).first()
+        # Check if we have a cached plan for today (skip if force_refresh is True)
+        cached_plan = None
+        if not force_refresh:
+            cached_plan = db.query(DayPlan).filter(
+                DayPlan.user_id == current_user.id,
+                DayPlan.date == today
+            ).first()
 
         if cached_plan:
             # Convert JSON back to Pydantic models
@@ -75,12 +81,17 @@ async def get_day_plan(
         free_blocks = calculate_free_blocks(events)
 
         # Get bus suggestions based on events
-        morning_bus, evening_bus = get_bus_suggestions_for_day(
-            db=db,
-            user_id=str(current_user.id),
-            date=today,
-            events=events
-        )
+        try:
+            morning_bus, evening_bus = get_bus_suggestions_for_day(
+                db=db,
+                user_id=str(current_user.id),
+                date=today,
+                events=events
+            )
+        except Exception as bus_error:
+            print(f"ERROR in get_bus_suggestions_for_day: {bus_error}")
+            print(f"Events: {[(e.title, e.start, e.start.tzinfo) for e in events]}")
+            raise
 
         # Convert bus suggestions to dict format
         bus_suggestions = {}
@@ -116,7 +127,13 @@ async def get_day_plan(
         free_blocks_dict = [block.model_dump(mode='json') for block in free_blocks]
         recommendations_dict = recommendations.model_dump(mode='json')
 
-        # Cache the plan
+        # Delete old cached plan for today if it exists (for force_refresh case)
+        db.query(DayPlan).filter(
+            DayPlan.user_id == current_user.id,
+            DayPlan.date == today
+        ).delete()
+
+        # Cache the new plan
         day_plan = DayPlan(
             user_id=current_user.id,
             date=today,
@@ -135,6 +152,9 @@ async def get_day_plan(
         )
 
     except Exception as e:
+        import traceback
+        print(f"ERROR in get_day_plan: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to generate day plan: {str(e)}")
 

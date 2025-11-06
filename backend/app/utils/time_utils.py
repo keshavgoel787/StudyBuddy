@@ -20,8 +20,28 @@ def calculate_free_blocks(
         duration = int((end_dt - start_dt).total_seconds() / 60)
         return [FreeBlock(start=start_dt, end=end_dt, duration_minutes=duration)]
 
+    # Normalize all events to have timezone info (use first event's timezone or UTC)
+    first_tz = None
+    for e in events:
+        if e.start.tzinfo is not None:
+            first_tz = e.start.tzinfo
+            break
+
+    if first_tz is None:
+        first_tz = timezone.utc
+
+    # Ensure all events have timezone info
+    normalized_events = []
+    for e in events:
+        if e.start.tzinfo is None:
+            # Add timezone to naive datetime
+            e.start = e.start.replace(tzinfo=first_tz)
+        if e.end.tzinfo is None:
+            e.end = e.end.replace(tzinfo=first_tz)
+        normalized_events.append(e)
+
     # Sort events by start time
-    sorted_events = sorted(events, key=lambda e: e.start)
+    sorted_events = sorted(normalized_events, key=lambda e: e.start)
 
     # Get the timezone from the first event, or use UTC
     event_tz = sorted_events[0].start.tzinfo or timezone.utc
