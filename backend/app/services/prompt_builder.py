@@ -72,11 +72,11 @@ def build_day_plan_prompt(
         "3. Commute timing",
         "4. Warm summary highlighting assigned study blocks & bus times",
         "",
-        "JSON format:",
+        f"JSON format (use date {date} for all datetimes):",
         "{",
-        '  "lunch_slots": [{"start": "2025-11-08T12:00:00", "end": "...", "label": "..."}],',
+        f'  "lunch_slots": [{{"start": "{date}T12:00:00", "end": "{date}T13:00:00", "label": "12:00 PM - 1:00 PM"}}],',
         '  "study_slots": [...],',
-        '  "commute_suggestion": {"leave_by": "...", "leave_by_label": "...", "reason": "..."},',
+        f'  "commute_suggestion": {{"leave_by": "{date}T19:15:00", "leave_by_label": "7:15 PM", "reason": "..."}},',
         '  "summary": "..."',
         "}"
     ])

@@ -347,7 +347,32 @@ def generate_day_plan(
         # Convert to Pydantic models
         lunch_slots = [TimeSlot(**slot) for slot in result.get("lunch_slots", [])]
         study_slots = [TimeSlot(**slot) for slot in result.get("study_slots", [])]
-        commute = CommuteSuggestion(**result["commute_suggestion"]) if result.get("commute_suggestion") else None
+
+        # Handle commute_suggestion - fix leave_by if it's just a time string
+        commute = None
+        if result.get("commute_suggestion"):
+            commute_data = result["commute_suggestion"]
+            # If leave_by is just a time (e.g., "09:25 AM"), convert to full datetime
+            if "leave_by" in commute_data:
+                leave_by_str = commute_data["leave_by"]
+                # Check if it's just a time (no date component)
+                if "T" not in leave_by_str and len(leave_by_str) < 12:
+                    # Parse the date from the prompt context
+                    from datetime import datetime as dt
+                    from zoneinfo import ZoneInfo
+                    # Use the date parameter passed to the function
+                    target_date = dt.fromisoformat(date).date()
+                    # Parse the time and combine with date
+                    try:
+                        time_obj = dt.strptime(leave_by_str.strip(), "%I:%M %p").time()
+                    except ValueError:
+                        # Try without space
+                        time_obj = dt.strptime(leave_by_str.strip(), "%I:%M%p").time()
+                    # Combine and make timezone-aware
+                    est = ZoneInfo("America/New_York")
+                    leave_by_dt = dt.combine(target_date, time_obj).replace(tzinfo=est)
+                    commute_data["leave_by"] = leave_by_dt.isoformat()
+            commute = CommuteSuggestion(**commute_data)
 
         return Recommendations(
             lunch_slots=lunch_slots,
