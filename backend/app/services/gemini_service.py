@@ -1,5 +1,6 @@
 import google.generativeai as genai
 import json
+import re
 from typing import List, Dict, Any
 from datetime import datetime
 from app.config import get_settings
@@ -9,6 +10,74 @@ settings = get_settings()
 
 # Configure Gemini
 genai.configure(api_key=settings.gemini_api_key)
+
+
+def sanitize_text_for_prompt(text: str) -> str:
+    """
+    Sanitize extracted text to prevent JSON formatting issues in prompts.
+    Handles special characters that could break JSON structure.
+    """
+    if not text:
+        return text
+
+    # Replace problematic characters that could interfere with JSON
+    # This doesn't escape them for JSON, just makes them safe for the prompt
+    sanitized = text.replace('\r\n', '\n').replace('\r', '\n')
+
+    # Remove null bytes and other control characters except newlines and tabs
+    sanitized = ''.join(char for char in sanitized if char == '\n' or char == '\t' or ord(char) >= 32)
+
+    return sanitized
+
+
+def parse_gemini_json_response(response_text: str) -> Dict[str, Any]:
+    """
+    Robustly parse JSON from Gemini response, handling various edge cases.
+
+    Args:
+        response_text: Raw response text from Gemini
+
+    Returns:
+        Parsed JSON dictionary
+
+    Raises:
+        Exception: If JSON cannot be parsed after all attempts
+    """
+    # Strategy 1: Try direct parsing
+    try:
+        return json.loads(response_text)
+    except json.JSONDecodeError:
+        pass
+
+    # Strategy 2: Strip markdown code fences
+    # Gemini sometimes wraps JSON in ```json ... ``` despite response_mime_type
+    cleaned = response_text.strip()
+    if cleaned.startswith('```'):
+        # Remove opening fence (```json or just ```)
+        lines = cleaned.split('\n')
+        if lines[0].startswith('```'):
+            lines = lines[1:]
+        # Remove closing fence
+        if lines and lines[-1].strip() == '```':
+            lines = lines[:-1]
+        cleaned = '\n'.join(lines)
+
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            pass
+
+    # Strategy 3: Extract JSON from text (find first { to last })
+    match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            pass
+
+    # All strategies failed - provide detailed error
+    preview = response_text[:500] + ('...' if len(response_text) > 500 else '')
+    raise Exception(f"Failed to parse Gemini response as JSON after multiple attempts. Response preview: {preview}")
 
 
 def generate_study_material(extracted_text: str, topic_hint: str = None) -> Dict[str, Any]:
@@ -30,6 +99,9 @@ def generate_study_material(extracted_text: str, topic_hint: str = None) -> Dict
     if not extracted_text or len(extracted_text.strip()) < 10:
         raise Exception("Extracted text is too short or empty. Need at least 10 characters.")
 
+    # Sanitize extracted text to prevent prompt injection and JSON issues
+    sanitized_text = sanitize_text_for_prompt(extracted_text)
+
     # Build the prompt with topic awareness
     topic_context = ""
     if topic_hint:
@@ -42,7 +114,7 @@ def generate_study_material(extracted_text: str, topic_hint: str = None) -> Dict
 Given the following notes, generate comprehensive study materials.{topic_context}
 
 NOTES:
-{extracted_text}
+{sanitized_text}
 
 Generate the following in valid JSON format:
 
@@ -73,7 +145,7 @@ Return ONLY valid JSON in this exact format:
 Make the questions challenging but fair, appropriate for the academic level and subject area."""
 
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-flash-latest')
 
         response = model.generate_content(
             prompt,
@@ -83,8 +155,15 @@ Make the questions challenging but fair, appropriate for the academic level and 
             )
         )
 
-        # Parse JSON response
-        result = json.loads(response.text)
+        # Parse JSON response using robust parsing
+        try:
+            result = parse_gemini_json_response(response.text)
+        except Exception as parse_error:
+            # Log the full response for debugging
+            print(f"ERROR: Failed to parse Gemini response")
+            print(f"Response length: {len(response.text)} chars")
+            print(f"Response preview: {response.text[:1000]}")
+            raise Exception(f"Failed to parse Gemini response as JSON: {str(parse_error)}")
 
         # Validate response structure
         required_keys = ["summary_short", "summary_detailed", "flashcards", "practice_questions"]
@@ -94,9 +173,10 @@ Make the questions challenging but fair, appropriate for the academic level and 
 
         return result
 
-    except json.JSONDecodeError as e:
-        raise Exception(f"Failed to parse Gemini response as JSON: {str(e)}")
     except Exception as e:
+        # Don't wrap exceptions that are already our custom exceptions
+        if "Failed to parse Gemini response" in str(e) or "Gemini response missing required field" in str(e):
+            raise
         raise Exception(f"Gemini API call failed: {str(e)}")
 
 
