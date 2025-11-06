@@ -225,22 +225,6 @@ export default function Dashboard() {
                 ))}
               </Card>
             )}
-
-            {/* Commute */}
-            {recommendations?.commute_suggestion && (
-              <Card variant="sage">
-                <div className="flex items-center gap-2 mb-3">
-                  <Bus className="w-6 h-6 text-sage" />
-                  <h3 className="text-xl font-semibold">Head Home 🚌</h3>
-                </div>
-                <p className="text-foreground/80">
-                  Leave by: {recommendations.commute_suggestion.leave_by_label}
-                </p>
-                <p className="text-sm text-mauve/70 mt-1">
-                  {recommendations.commute_suggestion.reason}
-                </p>
-              </Card>
-            )}
           </div>
         </div>
 

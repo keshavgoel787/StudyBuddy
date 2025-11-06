@@ -269,7 +269,9 @@ def generate_day_plan(
     date: str,
     events: List[CalendarEvent],
     free_blocks: List[FreeBlock],
-    commute_duration_minutes: int = 30
+    commute_duration_minutes: int = 30,
+    morning_bus_time: str = None,
+    evening_bus_time: str = None
 ) -> Recommendations:
     """
     Generate day plan recommendations using Gemini AI.
@@ -289,6 +291,15 @@ def generate_day_plan(
         for fb in free_blocks
     ])
 
+    # Format bus information for prompt
+    bus_info = ""
+    if morning_bus_time or evening_bus_time:
+        bus_info = "\n\nBUS SCHEDULE:"
+        if morning_bus_time:
+            bus_info += f"\n- Morning bus to campus: {morning_bus_time}"
+        if evening_bus_time:
+            bus_info += f"\n- Evening bus from campus: {evening_bus_time}"
+
     prompt = f"""You are a helpful personal assistant for a busy pre-med student.
 
 Today is {date}. Here is the student's schedule:
@@ -297,13 +308,13 @@ EVENTS:
 {events_text if events_text else "No events scheduled"}
 
 FREE TIME BLOCKS:
-{free_blocks_text if free_blocks_text else "Entire day is free"}
+{free_blocks_text if free_blocks_text else "Entire day is free"}{bus_info}
 
 Based on this schedule, recommend:
 1. 1-2 good lunch time windows (30-60 minutes each, ideally between 11 AM - 2 PM)
 2. 1-2 study blocks (60-120 minutes each, when they can focus)
 3. A time to leave for commute home (assuming {commute_duration_minutes} minute commute)
-4. A friendly natural language summary of the day and your suggestions
+4. A friendly, warm natural language summary of the day and your suggestions. If bus times are provided, mention them naturally in the summary to help the student plan their commute.
 
 Return ONLY valid JSON in this exact format:
 {{

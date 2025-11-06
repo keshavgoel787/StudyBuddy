@@ -89,13 +89,23 @@ async def get_day_plan(
         if evening_bus:
             bus_suggestions["evening"] = evening_bus.to_dict(today)
 
+        # Format bus times for AI summary
+        morning_bus_time = None
+        evening_bus_time = None
+        if morning_bus:
+            morning_bus_time = f"{morning_bus.departure_time.strftime('%I:%M %p')} (arrives {morning_bus.arrival_time.strftime('%I:%M %p')})"
+        if evening_bus:
+            evening_bus_time = f"{evening_bus.departure_time.strftime('%I:%M %p')} (arrives {evening_bus.arrival_time.strftime('%I:%M %p')})"
+
         # Generate AI recommendations (async wrapper for blocking Gemini call)
         recommendations = await asyncio.to_thread(
             generate_day_plan,
             date=today.strftime("%Y-%m-%d"),
             events=events,
             free_blocks=free_blocks,
-            commute_duration_minutes=30
+            commute_duration_minutes=30,
+            morning_bus_time=morning_bus_time,
+            evening_bus_time=evening_bus_time
         )
 
         # Add bus suggestions to recommendations
