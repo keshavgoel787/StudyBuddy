@@ -15,6 +15,9 @@ from app.models.user_token import UserToken
 from app.models.note_document import NoteDocument
 from app.models.study_material import StudyMaterial
 from app.models.day_plan import DayPlan
+from app.models.assignment import Assignment
+from app.models.bus_schedule import BusSchedule, Direction
+from app.models.day_preferences import DayPreferences, MoodType, FeelingType
 
 
 # Use in-memory SQLite for tests
@@ -145,3 +148,110 @@ def auth_headers(test_user):
     # In real implementation, you'd generate a proper JWT
     # For now, we'll mock the auth middleware
     return {"Authorization": f"Bearer test_token_{test_user.id}"}
+
+
+@pytest.fixture
+def test_assignment(db_session, test_user):
+    """Create a test assignment."""
+    from datetime import datetime, timedelta, timezone
+
+    assignment = Assignment(
+        user_id=test_user.id,
+        title="Physics Homework",
+        description="Chapter 5 problems",
+        due_date=datetime.now(timezone.utc) + timedelta(days=3),
+        estimated_hours=2.0,
+        priority=2,
+        completed=False
+    )
+    db_session.add(assignment)
+    db_session.commit()
+    db_session.refresh(assignment)
+    return assignment
+
+
+@pytest.fixture
+def test_assignments(db_session, test_user):
+    """Create multiple test assignments."""
+    from datetime import datetime, timedelta, timezone
+
+    assignments = [
+        Assignment(
+            user_id=test_user.id,
+            title="Physics Homework",
+            due_date=datetime.now(timezone.utc) + timedelta(days=2),
+            estimated_hours=2.0,
+            priority=3,
+            completed=False
+        ),
+        Assignment(
+            user_id=test_user.id,
+            title="Chemistry Lab Report",
+            due_date=datetime.now(timezone.utc) + timedelta(days=5),
+            estimated_hours=3.0,
+            priority=2,
+            completed=False
+        ),
+        Assignment(
+            user_id=test_user.id,
+            title="Biology Reading",
+            due_date=datetime.now(timezone.utc) + timedelta(days=7),
+            estimated_hours=1.5,
+            priority=1,
+            completed=False
+        ),
+    ]
+
+    for assignment in assignments:
+        db_session.add(assignment)
+    db_session.commit()
+
+    for assignment in assignments:
+        db_session.refresh(assignment)
+
+    return assignments
+
+
+@pytest.fixture
+def test_calendar_events():
+    """Create test calendar events."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from app.schemas.calendar import CalendarEvent
+
+    est = ZoneInfo("America/New_York")
+    today = datetime.now(est).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    return [
+        CalendarEvent(
+            id="event1",
+            title="Morning Lecture",
+            start=today.replace(hour=9),
+            end=today.replace(hour=10, minute=30),
+            event_type="calendar"
+        ),
+        CalendarEvent(
+            id="event2",
+            title="Lab Session",
+            start=today.replace(hour=14),
+            end=today.replace(hour=16),
+            event_type="calendar"
+        ),
+    ]
+
+
+@pytest.fixture
+def test_day_preferences(db_session, test_user):
+    """Create test day preferences."""
+    from datetime import date
+
+    prefs = DayPreferences(
+        user_id=test_user.id,
+        date=date.today(),
+        mood=MoodType.normal,
+        feeling=FeelingType.okay
+    )
+    db_session.add(prefs)
+    db_session.commit()
+    db_session.refresh(prefs)
+    return prefs

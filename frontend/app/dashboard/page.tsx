@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { FloatingFlower } from '@/components/AnimatedFlower';
-import { Calendar, Clock, Utensils, BookOpen, Bus, Sparkles, LogOut, RefreshCw, CheckSquare, Plus, Trash2, Circle, CheckCircle2 } from 'lucide-react';
-import { getDayPlan, getAssignments, createAssignment, updateAssignment, deleteAssignment, Assignment, AssignmentCreate } from '@/lib/api';
+import { Calendar, Clock, Utensils, BookOpen, Bus, Sparkles, LogOut, RefreshCw, CheckSquare, Plus, Trash2, Circle, CheckCircle2, CalendarPlus } from 'lucide-react';
+import { getDayPlan, getAssignments, createAssignment, updateAssignment, deleteAssignment, syncAssignmentBlockToCalendar, syncBusToCalendar, createCustomEvent, Assignment, AssignmentCreate, CustomEventCreate } from '@/lib/api';
 
 interface Event {
   id: string;
@@ -64,6 +64,17 @@ export default function Dashboard() {
     due_date: '',
     estimated_hours: 1,
     priority: 2
+  });
+  const [syncedEvents, setSyncedEvents] = useState<Set<string>>(new Set());
+  const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+  const [showCreateEventModal, setShowCreateEventModal] = useState(false);
+  const [newEvent, setNewEvent] = useState<CustomEventCreate>({
+    title: '',
+    start_time: '',
+    end_time: '',
+    description: '',
+    location: '',
+    color_id: '9' // Default to blue
   });
 
   useEffect(() => {
@@ -186,6 +197,115 @@ export default function Dashboard() {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   };
 
+  const showNotification = (message: string, type: 'success' | 'error') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 5000); // Auto-hide after 5 seconds
+  };
+
+  const handleSyncAssignmentBlock = async (event: Event) => {
+    const eventKey = `assignment-${event.id}`;
+    if (syncedEvents.has(eventKey)) {
+      showNotification('This assignment block is already synced to your calendar', 'error');
+      return;
+    }
+
+    try {
+      // Extract assignment ID from event.id (format: "assignment-{id}-{index}")
+      const assignmentIdMatch = event.id.match(/assignment-(\d+)-/);
+      if (!assignmentIdMatch) {
+        throw new Error('Invalid assignment block ID');
+      }
+      const assignmentId = parseInt(assignmentIdMatch[1]);
+
+      await syncAssignmentBlockToCalendar(assignmentId, event.start, event.end);
+      setSyncedEvents(prev => new Set(prev).add(eventKey));
+      showNotification(`Study block "${event.title}" added to Google Calendar!`, 'success');
+    } catch (error: any) {
+      console.error('Failed to sync assignment block:', error);
+      showNotification(
+        `Failed to sync: ${error.response?.data?.detail || error.message}`,
+        'error'
+      );
+    }
+  };
+
+  const handleSyncBus = async (busSuggestion: BusSuggestion) => {
+    const eventKey = `bus-${busSuggestion.direction}`;
+    if (syncedEvents.has(eventKey)) {
+      showNotification('This bus time is already synced to your calendar', 'error');
+      return;
+    }
+
+    try {
+      await syncBusToCalendar(
+        busSuggestion.direction as 'outbound' | 'inbound',
+        busSuggestion.departure_time,
+        busSuggestion.arrival_time
+      );
+      setSyncedEvents(prev => new Set(prev).add(eventKey));
+      showNotification(
+        `${busSuggestion.direction === 'outbound' ? 'Morning' : 'Evening'} bus added to Google Calendar!`,
+        'success'
+      );
+    } catch (error: any) {
+      console.error('Failed to sync bus:', error);
+      showNotification(
+        `Failed to sync bus: ${error.response?.data?.detail || error.message}`,
+        'error'
+      );
+    }
+  };
+
+  const handleCreateEvent = async () => {
+    // Validation
+    if (!newEvent.title.trim()) {
+      showNotification('Please enter an event title', 'error');
+      return;
+    }
+    if (!newEvent.start_time || !newEvent.end_time) {
+      showNotification('Please select start and end times', 'error');
+      return;
+    }
+
+    // Convert datetime-local format to ISO with timezone
+    const formatDateTime = (datetime: string) => {
+      if (!datetime) return '';
+      // datetime-local gives "2025-11-07T14:30", we need to add seconds and timezone
+      return datetime.includes('T') ? `${datetime}:00` : datetime;
+    };
+
+    try {
+      const eventToCreate = {
+        ...newEvent,
+        start_time: formatDateTime(newEvent.start_time),
+        end_time: formatDateTime(newEvent.end_time)
+      };
+
+      await createCustomEvent(eventToCreate);
+      showNotification(`Event "${newEvent.title}" created in Google Calendar!`, 'success');
+
+      // Reset form and close modal
+      setNewEvent({
+        title: '',
+        start_time: '',
+        end_time: '',
+        description: '',
+        location: '',
+        color_id: '9'
+      });
+      setShowCreateEventModal(false);
+
+      // Refresh day plan to show new event
+      loadDayPlan(true);
+    } catch (error: any) {
+      console.error('Failed to create event:', error);
+      showNotification(
+        `Failed to create event: ${error.response?.data?.detail || error.message}`,
+        'error'
+      );
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -204,6 +324,24 @@ export default function Dashboard() {
       <FloatingFlower initialX={92} initialY={12} color="#D4C5E2" delay={1.5} />
       <FloatingFlower initialX={8} initialY={85} color="#C5E1A5" delay={2} />
 
+      {/* Notification Toast */}
+      {notification && (
+        <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-right">
+          <div className={`px-6 py-4 rounded-xl shadow-lg border backdrop-blur-sm ${
+            notification.type === 'success'
+              ? 'bg-green-50/90 border-green-300 text-green-800'
+              : 'bg-red-50/90 border-red-300 text-red-800'
+          }`}>
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">
+                {notification.type === 'success' ? '✓' : '✕'}
+              </span>
+              <p className="font-medium">{notification.message}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-6xl mx-auto relative z-10">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
@@ -221,6 +359,13 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex gap-3">
+            <Button
+              variant="primary"
+              onClick={() => setShowCreateEventModal(true)}
+            >
+              <CalendarPlus className="w-4 h-4 mr-2" />
+              Create Event
+            </Button>
             <Button
               variant="primary"
               onClick={handleRefresh}
@@ -317,6 +462,30 @@ export default function Dashboard() {
                             </p>
                           )}
                         </div>
+                        {isAssignment && (
+                          <button
+                            onClick={() => handleSyncAssignmentBlock(event)}
+                            disabled={syncedEvents.has(`assignment-${event.id}`)}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                              syncedEvents.has(`assignment-${event.id}`)
+                                ? 'bg-green-100 text-green-700 cursor-not-allowed'
+                                : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                            }`}
+                            title={syncedEvents.has(`assignment-${event.id}`) ? 'Already synced' : 'Add to Google Calendar'}
+                          >
+                            {syncedEvents.has(`assignment-${event.id}`) ? (
+                              <>
+                                <CheckCircle2 className="w-4 h-4" />
+                                <span>Synced</span>
+                              </>
+                            ) : (
+                              <>
+                                <CalendarPlus className="w-4 h-4" />
+                                <span>Sync</span>
+                              </>
+                            )}
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -374,27 +543,51 @@ export default function Dashboard() {
                 {/* Morning Bus */}
                 {recommendations.bus_suggestions.morning && (
                   <div className="p-4 bg-white/50 rounded-xl border border-sage/30">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-2xl">🌅</span>
-                      <h3 className="font-semibold text-lg">Morning Bus</h3>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">🌅</span>
+                        <h3 className="font-semibold text-lg">Morning Bus</h3>
+                      </div>
+                      <button
+                        onClick={() => handleSyncBus(recommendations.bus_suggestions!.morning!)}
+                        disabled={syncedEvents.has('bus-outbound')}
+                        className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                          syncedEvents.has('bus-outbound')
+                            ? 'bg-green-100 text-green-700 cursor-not-allowed'
+                            : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                        }`}
+                        title={syncedEvents.has('bus-outbound') ? 'Already synced' : 'Add to Google Calendar'}
+                      >
+                        {syncedEvents.has('bus-outbound') ? (
+                          <>
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Synced</span>
+                          </>
+                        ) : (
+                          <>
+                            <CalendarPlus className="w-3 h-3" />
+                            <span>Sync</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-mauve">Departs Main & Murray:</span>
                         <span className="font-semibold text-sage">
-                          {recommendations.bus_suggestions.morning.departure_label}
+                          {recommendations.bus_suggestions!.morning!.departure_label}
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-mauve">Arrives at UDC:</span>
                         <span className="font-semibold text-sage">
-                          {recommendations.bus_suggestions.morning.arrival_label}
+                          {recommendations.bus_suggestions!.morning!.arrival_label}
                         </span>
                       </div>
                       <p className="text-sm text-mauve/70 mt-2 italic">
-                        💡 {recommendations.bus_suggestions.morning.reason}
+                        💡 {recommendations.bus_suggestions!.morning!.reason}
                       </p>
-                      {recommendations.bus_suggestions.morning.is_late_night && (
+                      {recommendations.bus_suggestions!.morning!.is_late_night && (
                         <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full mt-2">
                           🌙 Late Night Bus
                         </span>
@@ -406,27 +599,51 @@ export default function Dashboard() {
                 {/* Evening Bus */}
                 {recommendations.bus_suggestions.evening && (
                   <div className="p-4 bg-white/50 rounded-xl border border-sage/30">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-2xl">🌆</span>
-                      <h3 className="font-semibold text-lg">Evening Bus</h3>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">🌆</span>
+                        <h3 className="font-semibold text-lg">Evening Bus</h3>
+                      </div>
+                      <button
+                        onClick={() => handleSyncBus(recommendations.bus_suggestions!.evening!)}
+                        disabled={syncedEvents.has('bus-inbound')}
+                        className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                          syncedEvents.has('bus-inbound')
+                            ? 'bg-green-100 text-green-700 cursor-not-allowed'
+                            : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                        }`}
+                        title={syncedEvents.has('bus-inbound') ? 'Already synced' : 'Add to Google Calendar'}
+                      >
+                        {syncedEvents.has('bus-inbound') ? (
+                          <>
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Synced</span>
+                          </>
+                        ) : (
+                          <>
+                            <CalendarPlus className="w-3 h-3" />
+                            <span>Sync</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-mauve">Departs UDC:</span>
                         <span className="font-semibold text-sage">
-                          {recommendations.bus_suggestions.evening.departure_label}
+                          {recommendations.bus_suggestions!.evening!.departure_label}
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-mauve">Arrives Main & Murray:</span>
                         <span className="font-semibold text-sage">
-                          {recommendations.bus_suggestions.evening.arrival_label}
+                          {recommendations.bus_suggestions!.evening!.arrival_label}
                         </span>
                       </div>
                       <p className="text-sm text-mauve/70 mt-2 italic">
-                        💡 {recommendations.bus_suggestions.evening.reason}
+                        💡 {recommendations.bus_suggestions!.evening!.reason}
                       </p>
-                      {recommendations.bus_suggestions.evening.is_late_night && (
+                      {recommendations.bus_suggestions!.evening!.is_late_night && (
                         <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full mt-2">
                           🌙 Late Night Bus
                         </span>
@@ -622,6 +839,130 @@ export default function Dashboard() {
           </Button>
         </Card>
       </div>
+
+      {/* Create Event Modal */}
+      {showCreateEventModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-rose">Create Event</h2>
+              <button
+                onClick={() => setShowCreateEventModal(false)}
+                className="text-mauve hover:text-rose transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Title */}
+              <div>
+                <label className="block text-sm font-medium text-mauve mb-2">
+                  Event Title *
+                </label>
+                <input
+                  type="text"
+                  value={newEvent.title}
+                  onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+                  placeholder="e.g., Doctor Appointment"
+                  className="w-full px-4 py-2 border border-sage/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose"
+                />
+              </div>
+
+              {/* Start Time */}
+              <div>
+                <label className="block text-sm font-medium text-mauve mb-2">
+                  Start Time *
+                </label>
+                <input
+                  type="datetime-local"
+                  value={newEvent.start_time}
+                  onChange={(e) => setNewEvent({ ...newEvent, start_time: e.target.value })}
+                  className="w-full px-4 py-2 border border-sage/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose"
+                />
+              </div>
+
+              {/* End Time */}
+              <div>
+                <label className="block text-sm font-medium text-mauve mb-2">
+                  End Time *
+                </label>
+                <input
+                  type="datetime-local"
+                  value={newEvent.end_time}
+                  onChange={(e) => setNewEvent({ ...newEvent, end_time: e.target.value })}
+                  className="w-full px-4 py-2 border border-sage/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose"
+                />
+              </div>
+
+              {/* Location */}
+              <div>
+                <label className="block text-sm font-medium text-mauve mb-2">
+                  Location (optional)
+                </label>
+                <input
+                  type="text"
+                  value={newEvent.location}
+                  onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })}
+                  placeholder="e.g., Student Health Center"
+                  className="w-full px-4 py-2 border border-sage/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-medium text-mauve mb-2">
+                  Description (optional)
+                </label>
+                <textarea
+                  value={newEvent.description}
+                  onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
+                  placeholder="Add any notes..."
+                  rows={3}
+                  className="w-full px-4 py-2 border border-sage/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose resize-none"
+                />
+              </div>
+
+              {/* Color */}
+              <div>
+                <label className="block text-sm font-medium text-mauve mb-2">
+                  Calendar Color
+                </label>
+                <select
+                  value={newEvent.color_id}
+                  onChange={(e) => setNewEvent({ ...newEvent, color_id: e.target.value })}
+                  className="w-full px-4 py-2 border border-sage/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose"
+                >
+                  <option value="9">Blue (Default)</option>
+                  <option value="3">Purple (Study)</option>
+                  <option value="10">Green</option>
+                  <option value="11">Red</option>
+                  <option value="5">Yellow</option>
+                  <option value="6">Orange</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowCreateEventModal(false)}
+                className="flex-1 px-4 py-2 border border-sage/30 rounded-lg text-mauve hover:bg-sage/10 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateEvent}
+                className="flex-1 px-4 py-2 bg-rose text-white rounded-lg hover:bg-rose/90 transition-colors font-medium"
+              >
+                Create Event
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

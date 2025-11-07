@@ -164,4 +164,58 @@ export const deleteAssignment = async (id: number): Promise<void> => {
   await api.delete(`/assignments/${id}`);
   // Invalidate cache after deletion
   apiCache.invalidatePattern(/^assignments:/);
+  // Also invalidate calendar cache since assignment blocks may have changed
+  apiCache.invalidate('calendar:day-plan');
+};
+
+// Google Calendar Event Sync
+export interface EventSyncResponse {
+  event_id: string;
+  message: string;
+}
+
+export const syncAssignmentBlockToCalendar = async (
+  assignmentId: number,
+  startTime: string,
+  endTime: string
+): Promise<EventSyncResponse> => {
+  const response = await api.post('/calendar/events/sync-assignment-block', {
+    assignment_id: assignmentId,
+    start_time: startTime,
+    end_time: endTime
+  });
+  // Invalidate calendar cache after sync
+  apiCache.invalidate('calendar:day-plan');
+  return response.data;
+};
+
+export const syncBusToCalendar = async (
+  direction: 'outbound' | 'inbound',
+  departureTime: string,
+  arrivalTime: string
+): Promise<EventSyncResponse> => {
+  const response = await api.post('/calendar/events/sync-bus', {
+    direction,
+    departure_time: departureTime,
+    arrival_time: arrivalTime
+  });
+  // Invalidate calendar cache after sync
+  apiCache.invalidate('calendar:day-plan');
+  return response.data;
+};
+
+export interface CustomEventCreate {
+  title: string;
+  start_time: string;
+  end_time: string;
+  description?: string;
+  location?: string;
+  color_id?: string; // 1-11 Google Calendar color IDs
+}
+
+export const createCustomEvent = async (event: CustomEventCreate): Promise<EventSyncResponse> => {
+  const response = await api.post('/calendar/events/create', event);
+  // Invalidate calendar cache after creation
+  apiCache.invalidate('calendar:day-plan');
+  return response.data;
 };
