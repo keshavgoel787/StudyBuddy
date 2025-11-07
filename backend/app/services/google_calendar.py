@@ -7,6 +7,27 @@ from app.schemas.calendar import CalendarEvent
 from app.utils.logger import log_info, log_error
 
 
+def _build_calendar_service(access_token: str, refresh_token: str = None):
+    """
+    Helper function to build Google Calendar API service.
+
+    Args:
+        access_token: Google OAuth access token
+        refresh_token: Google OAuth refresh token (optional)
+
+    Returns:
+        Google Calendar API service object
+    """
+    creds = Credentials(
+        token=access_token,
+        refresh_token=refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=None,  # Not needed for API calls
+        client_secret=None
+    )
+    return build('calendar', 'v3', credentials=creds)
+
+
 def get_todays_events(access_token: str, refresh_token: str = None) -> List[CalendarEvent]:
     """
     Fetch today's events from Google Calendar.
@@ -19,17 +40,8 @@ def get_todays_events(access_token: str, refresh_token: str = None) -> List[Cale
         List of CalendarEvent objects
     """
     try:
-        # Create credentials object
-        creds = Credentials(
-            token=access_token,
-            refresh_token=refresh_token,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=None,  # Not needed for API calls
-            client_secret=None
-        )
-
         # Build the Calendar API service
-        service = build('calendar', 'v3', credentials=creds)
+        service = _build_calendar_service(access_token, refresh_token)
 
         # Get today's date range in EST timezone
         # Import timezone utilities
@@ -133,17 +145,8 @@ def create_calendar_event(
         6: Tangerine, 7: Peacock, 8: Graphite, 9: Blueberry, 10: Basil, 11: Tomato
     """
     try:
-        # Create credentials object
-        creds = Credentials(
-            token=access_token,
-            refresh_token=refresh_token,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=None,
-            client_secret=None
-        )
-
         # Build the Calendar API service
-        service = build('calendar', 'v3', credentials=creds)
+        service = _build_calendar_service(access_token, refresh_token)
 
         # Convert times to RFC3339 format (Google Calendar expects this)
         # Ensure timezone-aware
@@ -289,15 +292,7 @@ def delete_calendar_event(
         True if successful
     """
     try:
-        creds = Credentials(
-            token=access_token,
-            refresh_token=refresh_token,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=None,
-            client_secret=None
-        )
-
-        service = build('calendar', 'v3', credentials=creds)
+        service = _build_calendar_service(access_token, refresh_token)
         service.events().delete(calendarId='primary', eventId=event_id).execute()
 
         log_info("google_calendar", "Deleted event", event_id=event_id)

@@ -27,6 +27,29 @@ from app.services.day_plan_orchestrator import orchestrate_day_plan
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
 
+def _get_user_calendar_token(user_id: str, db: Session) -> UserToken:
+    """
+    Helper function to get and validate user's calendar access token.
+
+    Args:
+        user_id: User ID
+        db: Database session
+
+    Returns:
+        Valid UserToken object
+
+    Raises:
+        HTTPException: If no token found or validation fails
+    """
+    user_token = db.query(UserToken).filter(UserToken.user_id == user_id).first()
+
+    if not user_token:
+        raise HTTPException(status_code=401, detail="No Google Calendar access. Please sign in again.")
+
+    # Ensure token is valid (refresh if expired)
+    return get_valid_user_token(user_token, db)
+
+
 @router.get("/day-plan", response_model=DayPlanResponse)
 async def get_day_plan(
     force_refresh: bool = False,
@@ -73,14 +96,8 @@ async def get_day_plan(
             )
 
         # No cached plan - generate new one
-        # Get user's Google tokens
-        user_token = db.query(UserToken).filter(UserToken.user_id == current_user.id).first()
-
-        if not user_token:
-            raise HTTPException(status_code=401, detail="No Google Calendar access. Please sign in again.")
-
-        # Ensure token is valid (refresh if expired)
-        user_token = get_valid_user_token(user_token, db)
+        # Get user's validated Google tokens
+        user_token = _get_user_calendar_token(str(current_user.id), db)
 
         # Fetch events from Google Calendar (async wrapper for blocking call)
         import asyncio
@@ -247,14 +264,8 @@ async def create_event(
     This allows users to add any event directly from the dashboard.
     """
     try:
-        # Get user's Google tokens
-        user_token = db.query(UserToken).filter(UserToken.user_id == current_user.id).first()
-
-        if not user_token:
-            raise HTTPException(status_code=401, detail="No Google Calendar access. Please sign in again.")
-
-        # Ensure token is valid
-        user_token = get_valid_user_token(user_token, db)
+        # Get user's validated Google tokens
+        user_token = _get_user_calendar_token(str(current_user.id), db)
 
         # Create the event
         event_id = create_calendar_event(
@@ -289,14 +300,8 @@ async def sync_assignment_block(
     Creates a purple study block event with assignment details.
     """
     try:
-        # Get user's Google tokens
-        user_token = db.query(UserToken).filter(UserToken.user_id == current_user.id).first()
-
-        if not user_token:
-            raise HTTPException(status_code=401, detail="No Google Calendar access. Please sign in again.")
-
-        # Ensure token is valid
-        user_token = get_valid_user_token(user_token, db)
+        # Get user's validated Google tokens
+        user_token = _get_user_calendar_token(str(current_user.id), db)
 
         # Get assignment details
         assignment = db.query(Assignment).filter(
@@ -340,14 +345,8 @@ async def sync_bus(
     Creates a blue commute event with bus details.
     """
     try:
-        # Get user's Google tokens
-        user_token = db.query(UserToken).filter(UserToken.user_id == current_user.id).first()
-
-        if not user_token:
-            raise HTTPException(status_code=401, detail="No Google Calendar access. Please sign in again.")
-
-        # Ensure token is valid
-        user_token = get_valid_user_token(user_token, db)
+        # Get user's validated Google tokens
+        user_token = _get_user_calendar_token(str(current_user.id), db)
 
         # Determine locations based on direction
         if request.direction == "outbound":
