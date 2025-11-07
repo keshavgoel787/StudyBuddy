@@ -5,7 +5,6 @@ Service for finding optimal bus times based on user's schedule.
 from datetime import datetime, time, timedelta
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
-import pytz
 
 from app.models.bus_schedule import BusSchedule, Direction
 from app.models.user_bus_preferences import UserBusPreferences
