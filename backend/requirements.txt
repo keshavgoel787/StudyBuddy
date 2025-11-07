@@ -13,6 +13,8 @@ google-auth-oauthlib==1.2.1
 google-auth-httplib2==0.2.0
 google-api-python-client==2.154.0
 google-generativeai==0.8.3
+groq==0.11.0
+openai==1.54.0
 pytesseract==0.3.13
 Pillow==11.0.0
 python-dotenv==1.0.1

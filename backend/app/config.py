@@ -16,8 +16,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expiration_hours: int = 168  # 1 week
 
-    # Gemini AI
+    # AI APIs
     gemini_api_key: str
+    groq_api_key: str | None = None
+    openai_api_key: str | None = None
 
     # Frontend
     frontend_url: str

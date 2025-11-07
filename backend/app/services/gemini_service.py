@@ -6,11 +6,12 @@ from datetime import datetime
 from app.config import get_settings
 from app.schemas.calendar import CalendarEvent, FreeBlock, TimeSlot, CommuteSuggestion, Recommendations
 from app.services.prompt_builder import build_day_plan_prompt
+from app.services.ai_service import generate_json_completion
 from app.utils.logger import log_error, log_debug
 
 settings = get_settings()
 
-# Configure Gemini
+# Configure Gemini (still needed for study material generation)
 genai.configure(api_key=settings.gemini_api_key)
 
 
@@ -295,54 +296,8 @@ def generate_day_plan(
     )
 
     try:
-        model = genai.GenerativeModel('gemini-flash-latest')
-
-        # Configure safety settings to be more permissive
-        safety_settings = [
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-        ]
-
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.GenerationConfig(
-                temperature=0.7,
-                response_mime_type="application/json"
-            ),
-            safety_settings=safety_settings
-        )
-
-        # Check if response was blocked or empty
-        if not response.candidates:
-            raise Exception("Gemini did not return any response. The content may have been blocked by safety filters.")
-
-        # Check for safety ratings that blocked the response
-        candidate = response.candidates[0]
-        if hasattr(candidate, 'finish_reason') and candidate.finish_reason not in [1, 0]:  # 1 = STOP (normal), 0 = UNSPECIFIED
-            finish_reason_name = candidate.finish_reason.name if hasattr(candidate.finish_reason, 'name') else str(candidate.finish_reason)
-            raise Exception(f"Gemini response was blocked. Finish reason: {finish_reason_name}")
-
-        # Safely extract text from response
-        try:
-            response_text = response.text
-        except (TypeError, AttributeError, ValueError) as e:
-            # If response.text fails, try to extract from parts directly
-            log_error("gemini_service", "Cannot access response.text in generate_day_plan", e)
-            if response.candidates and response.candidates[0].content.parts:
-                try:
-                    response_text = response.candidates[0].content.parts[0].text
-                    log_debug("gemini_service", "Extracted text from parts in generate_day_plan",
-                             chars=len(response_text))
-                except Exception as parts_error:
-                    log_error("gemini_service", "Cannot extract text from parts in generate_day_plan", parts_error)
-                    raise Exception(f"Cannot extract text from Gemini response. Original error: {str(e)}")
-            else:
-                raise Exception(f"Gemini response has no valid content. Error: {str(e)}")
-
-        # Parse JSON response
-        result = json.loads(response_text)
+        # Use unified AI service (Groq → GPT → Gemini fallback)
+        result = generate_json_completion(prompt, temperature=0.7)
 
         # Convert to Pydantic models
         lunch_slots = [TimeSlot(**slot) for slot in result.get("lunch_slots", [])]
