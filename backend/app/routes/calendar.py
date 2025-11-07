@@ -279,6 +279,11 @@ async def create_event(
             refresh_token=user_token.refresh_token
         )
 
+        # Invalidate day plan cache so next fetch gets fresh data
+        from app.utils.cache import invalidate_day_plan_cache
+        from datetime import date
+        invalidate_day_plan_cache(db, str(current_user.id), date.today())
+
         return EventCreateResponse(
             event_id=event_id,
             message=f"Event '{event.title}' created successfully"
@@ -321,6 +326,11 @@ async def sync_assignment_block(
             due_date=assignment.due_date,
             refresh_token=user_token.refresh_token
         )
+
+        # Invalidate day plan cache so next fetch gets fresh data
+        from app.utils.cache import invalidate_day_plan_cache
+        from datetime import date
+        invalidate_day_plan_cache(db, str(current_user.id), date.today())
 
         return EventCreateResponse(
             event_id=event_id,
@@ -366,6 +376,11 @@ async def sync_bus(
             arrival_location=arrival_location,
             refresh_token=user_token.refresh_token
         )
+
+        # Invalidate day plan cache so next fetch gets fresh data
+        from app.utils.cache import invalidate_day_plan_cache
+        from datetime import date
+        invalidate_day_plan_cache(db, str(current_user.id), date.today())
 
         return EventCreateResponse(
             event_id=event_id,
@@ -413,6 +428,11 @@ async def delete_event(
             event_id=event_id,
             refresh_token=user_token.refresh_token
         )
+
+        # Invalidate day plan cache so next fetch gets fresh data
+        from app.utils.cache import invalidate_day_plan_cache
+        from datetime import date
+        invalidate_day_plan_cache(db, str(current_user.id), date.today())
 
         return EventDeleteResponse(
             success=True,

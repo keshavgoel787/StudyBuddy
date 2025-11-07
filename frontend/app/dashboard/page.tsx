@@ -221,9 +221,9 @@ export default function Dashboard() {
       setSyncedEvents(prev => new Set(prev).add(eventKey));
       showNotification(`Study block "${event.title}" added to Google Calendar!`, 'success');
 
-      // Auto-refresh dashboard to show synced event
+      // Auto-refresh dashboard to show synced event (lightweight - no AI regeneration)
       setRefreshing(true);
-      await loadDayPlan(true);
+      await loadDayPlan(false);
     } catch (error: any) {
       console.error('Failed to sync assignment block:', error);
       showNotification(
@@ -252,9 +252,9 @@ export default function Dashboard() {
         'success'
       );
 
-      // Auto-refresh dashboard to show synced event
+      // Auto-refresh dashboard to show synced event (lightweight - no AI regeneration)
       setRefreshing(true);
-      await loadDayPlan(true);
+      await loadDayPlan(false);
     } catch (error: any) {
       console.error('Failed to sync bus:', error);
       showNotification(
@@ -303,9 +303,9 @@ export default function Dashboard() {
       });
       setShowCreateEventModal(false);
 
-      // Refresh day plan to show new event
+      // Refresh day plan to show new event (lightweight - no AI regeneration)
       setRefreshing(true);
-      await loadDayPlan(true);
+      await loadDayPlan(false);
     } catch (error: any) {
       console.error('Failed to create event:', error);
       showNotification(
@@ -332,9 +332,9 @@ export default function Dashboard() {
         return newSet;
       });
 
-      // Refresh day plan to show updated schedule
+      // Refresh day plan to show updated schedule (lightweight - no AI regeneration)
       setRefreshing(true);
-      await loadDayPlan(true);
+      await loadDayPlan(false);
     } catch (error: any) {
       console.error('Failed to delete event:', error);
       showNotification(
