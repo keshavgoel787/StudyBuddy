@@ -356,7 +356,7 @@ def generate_day_plan(
             if "leave_by" in commute_data:
                 leave_by_str = commute_data["leave_by"]
                 # Check if it's just a time (no date component)
-                if "T" not in leave_by_str and len(leave_by_str) < 12:
+                if leave_by_str and "T" not in leave_by_str and len(leave_by_str) < 12:
                     # Parse the date from the prompt context
                     from datetime import datetime as dt
                     from zoneinfo import ZoneInfo

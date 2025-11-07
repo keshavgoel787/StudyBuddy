@@ -21,7 +21,8 @@ SCOPES = [
     'openid',
     'https://www.googleapis.com/auth/userinfo.email',
     'https://www.googleapis.com/auth/userinfo.profile',
-    'https://www.googleapis.com/auth/calendar.readonly'
+    'https://www.googleapis.com/auth/calendar',  # Full calendar access (read + write)
+    'https://www.googleapis.com/auth/calendar.readonly'  # Google includes this automatically with calendar scope
 ]
 
 
