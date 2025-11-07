@@ -19,9 +19,19 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Configure CORS
+# Handle frontend URL with or without trailing slash
+frontend_origins = [
+    settings.frontend_url,
+    settings.frontend_url.rstrip('/'),  # Remove trailing slash if present
+    "http://localhost:5173",
+    "http://localhost:3000"
+]
+# Remove duplicates
+frontend_origins = list(set(frontend_origins))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url, "http://localhost:5173"],
+    allow_origins=frontend_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
