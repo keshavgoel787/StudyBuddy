@@ -219,3 +219,9 @@ export const createCustomEvent = async (event: CustomEventCreate): Promise<Event
   apiCache.invalidate('calendar:day-plan');
   return response.data;
 };
+
+export const deleteCalendarEvent = async (eventId: string): Promise<void> => {
+  await api.delete(`/calendar/events/${eventId}`);
+  // Invalidate calendar cache after deletion
+  apiCache.invalidate('calendar:day-plan');
+};

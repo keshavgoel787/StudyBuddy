@@ -11,7 +11,7 @@ from app.models.assignment import Assignment
 from app.schemas.calendar import DayPlanResponse
 from app.schemas.bus import BusPreferencesUpdate, BusPreferencesResponse
 from app.schemas.events import (
-    EventCreate, EventCreateResponse,
+    EventCreate, EventCreateResponse, EventDeleteResponse,
     SyncAssignmentBlockRequest, SyncBusRequest
 )
 from app.utils.auth_middleware import get_current_user
@@ -19,7 +19,7 @@ from app.utils.token_refresh import get_valid_user_token
 from app.utils.cache import cleanup_old_day_plans
 from app.services.google_calendar import (
     get_todays_events, create_calendar_event,
-    create_assignment_block_event, create_bus_event
+    create_assignment_block_event, create_bus_event, delete_calendar_event
 )
 from app.services.bus_service import get_all_buses_for_day
 from app.services.day_plan_orchestrator import orchestrate_day_plan
@@ -376,3 +376,63 @@ async def sync_bus(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to sync bus: {str(e)}")
+
+
+@router.delete("/events/{event_id}", response_model=EventDeleteResponse)
+async def delete_event(
+    event_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete an event from Google Calendar.
+
+    This endpoint allows users to delete any event from their Google Calendar,
+    including custom events, synced assignment blocks, and synced bus events.
+
+    Args:
+        event_id: The Google Calendar event ID to delete
+        current_user: Authenticated user
+        db: Database session
+
+    Returns:
+        EventDeleteResponse with success status and message
+
+    Raises:
+        HTTPException 401: If user has no Google Calendar access
+        HTTPException 404: If event not found or user doesn't have permission
+        HTTPException 500: If deletion fails
+    """
+    try:
+        # Get user's calendar access token
+        user_token = _get_user_calendar_token(current_user.id, db)
+
+        # Delete the event from Google Calendar
+        delete_calendar_event(
+            access_token=user_token.access_token,
+            event_id=event_id,
+            refresh_token=user_token.refresh_token
+        )
+
+        return EventDeleteResponse(
+            success=True,
+            message="Event deleted from Google Calendar"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = str(e).lower()
+
+        # Handle 404 not found errors
+        if "not found" in error_msg or "404" in error_msg:
+            raise HTTPException(
+                status_code=404,
+                detail="Event not found or you don't have permission to delete it"
+            )
+
+        # Handle other errors
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete event: {str(e)}"
+        )

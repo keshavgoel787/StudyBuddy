@@ -23,6 +23,12 @@ class EventCreateResponse(BaseModel):
     message: str
 
 
+class EventDeleteResponse(BaseModel):
+    """Response after deleting an event."""
+    success: bool
+    message: str
+
+
 class SyncAssignmentBlockRequest(BaseModel):
     """Request to sync assignment block to Google Calendar."""
     assignment_id: int

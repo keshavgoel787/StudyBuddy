@@ -6,7 +6,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { FloatingFlower } from '@/components/AnimatedFlower';
 import { Calendar, Clock, Utensils, BookOpen, Bus, Sparkles, LogOut, RefreshCw, CheckSquare, Plus, Trash2, Circle, CheckCircle2, CalendarPlus } from 'lucide-react';
-import { getDayPlan, getAssignments, createAssignment, updateAssignment, deleteAssignment, syncAssignmentBlockToCalendar, syncBusToCalendar, createCustomEvent, Assignment, AssignmentCreate, CustomEventCreate } from '@/lib/api';
+import { getDayPlan, getAssignments, createAssignment, updateAssignment, deleteAssignment, syncAssignmentBlockToCalendar, syncBusToCalendar, createCustomEvent, deleteCalendarEvent, Assignment, AssignmentCreate, CustomEventCreate } from '@/lib/api';
 
 interface Event {
   id: string;
@@ -306,6 +306,34 @@ export default function Dashboard() {
     }
   };
 
+  const handleDeleteEvent = async (event: Event) => {
+    // Confirmation dialog
+    if (!confirm(`Delete "${event.title}" from Google Calendar?`)) {
+      return;
+    }
+
+    try {
+      await deleteCalendarEvent(event.id);
+      showNotification(`Event "${event.title}" deleted from calendar`, 'success');
+
+      // Remove from synced events if it was synced
+      setSyncedEvents(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(event.id);
+        return newSet;
+      });
+
+      // Refresh day plan to show updated schedule
+      loadDayPlan(true);
+    } catch (error: any) {
+      console.error('Failed to delete event:', error);
+      showNotification(
+        `Failed to delete event: ${error.response?.data?.detail || error.message}`,
+        'error'
+      );
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -432,7 +460,7 @@ export default function Dashboard() {
                   return (
                     <div
                       key={event.id}
-                      className={`p-4 rounded-xl border ${
+                      className={`p-4 rounded-xl border relative ${
                         isAssignment
                           ? 'bg-purple-50/50 border-purple-300/50'
                           : isCommute
@@ -440,7 +468,16 @@ export default function Dashboard() {
                           : 'bg-soft-pink/30 border-rose/20'
                       }`}
                     >
-                      <div className="flex items-start gap-2">
+                      {/* Delete button in top-right corner */}
+                      <button
+                        onClick={() => handleDeleteEvent(event)}
+                        className="absolute top-2 right-2 p-1.5 rounded-lg text-mauve/60 hover:text-red-600 hover:bg-red-50 transition-all"
+                        title="Delete event from Google Calendar"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+
+                      <div className="flex items-start gap-2 pr-8">
                         {isAssignment && <span className="text-lg">📚</span>}
                         {isCommute && <span className="text-lg">🚌</span>}
                         <div className="flex-1">
