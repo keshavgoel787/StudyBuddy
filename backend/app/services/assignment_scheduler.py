@@ -48,8 +48,8 @@ def propose_assignment_blocks_for_today(
     today_midnight = datetime.combine(today, time.min)
     if today_midnight.tzinfo is None:
         # Make timezone-aware if needed (use UTC as default)
-        import pytz
-        today_midnight = today_midnight.replace(tzinfo=pytz.UTC)
+        from datetime import timezone
+        today_midnight = today_midnight.replace(tzinfo=timezone.utc)
 
     eligible_assignments = [
         a for a in assignments
