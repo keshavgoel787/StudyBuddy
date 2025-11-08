@@ -92,8 +92,11 @@ def propose_assignment_blocks_for_today(
                      max_hours=MAX_STUDY_HOURS_PER_DAY)
             break
 
+        # Use estimated_hours if provided, otherwise default to 1.0
+        estimated = assignment.estimated_hours if assignment.estimated_hours is not None else 1.0
+
         hours_for_this_assignment_today = min(
-            assignment.estimated_hours,
+            estimated,
             hours_available_today,
             2.0,  # don't schedule more than 2h of one assignment in a single day
         )
