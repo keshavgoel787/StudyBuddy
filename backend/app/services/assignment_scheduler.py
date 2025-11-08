@@ -50,10 +50,35 @@ def propose_assignment_blocks_for_today(
         from zoneinfo import ZoneInfo
         today_midnight = today_midnight.replace(tzinfo=ZoneInfo("America/New_York"))
 
-    eligible_assignments = [
-        a for a in assignments
-        if not a.completed and a.due_date >= today_midnight
-    ]
+    # Filter assignments with smart urgency logic (same as prompt_builder.py)
+    eligible_assignments = []
+    for a in assignments:
+        if a.completed or a.due_date < today_midnight:
+            continue
+
+        # Calculate days until due
+        due_date = a.due_date.date() if hasattr(a.due_date, 'date') else a.due_date
+        days_until_due = (due_date - today).days
+
+        # Skip assignments that are too far in the future (>14 days)
+        if days_until_due > 14:
+            continue
+
+        # Apply type-based urgency filtering
+        atype = (a.assignment_type or '').lower()
+
+        # Exams: schedule if 0-5 days out
+        if 'exam' in atype:
+            if days_until_due <= 5:
+                eligible_assignments.append(a)
+        # Quizzes: schedule if 0-3 days out
+        elif 'quiz' in atype:
+            if days_until_due <= 3:
+                eligible_assignments.append(a)
+        # Other assignments: schedule if 0-5 days out AND high priority (>=2)
+        else:
+            if days_until_due <= 5 and a.priority >= 2:
+                eligible_assignments.append(a)
 
     log_debug("assignment_scheduler", "Eligible assignments found",
              eligible=len(eligible_assignments))
@@ -92,8 +117,24 @@ def propose_assignment_blocks_for_today(
                      max_hours=MAX_STUDY_HOURS_PER_DAY)
             break
 
-        # Use estimated_hours if provided, otherwise default to 1.0
-        estimated = assignment.estimated_hours if assignment.estimated_hours is not None else 1.0
+        # Determine block size based on assignment type and urgency
+        atype = (assignment.assignment_type or '').lower()
+        due_date = assignment.due_date.date() if hasattr(assignment.due_date, 'date') else assignment.due_date
+        days_until_due = (due_date - today).days
+
+        # Use estimated_hours if provided, otherwise use smart defaults
+        if assignment.estimated_hours is not None:
+            estimated = assignment.estimated_hours
+        else:
+            # Smart defaults based on type
+            if 'exam' in atype:
+                estimated = 2.0  # Exams need longer study blocks
+            elif 'quiz' in atype:
+                estimated = 1.0  # Quizzes need moderate blocks
+            elif 'lab' in atype or 'project' in atype or 'essay' in atype:
+                estimated = 1.5  # Complex assignments need longer blocks
+            else:
+                estimated = 1.0  # Default for homework/reading
 
         hours_for_this_assignment_today = min(
             estimated,
@@ -106,7 +147,8 @@ def propose_assignment_blocks_for_today(
 
         log_debug("assignment_scheduler", "Scheduling assignment",
                  title=assignment.title,
-                 hours=f"{hours_for_this_assignment_today:.1f}h")
+                 hours=f"{hours_for_this_assignment_today:.1f}h",
+                 type=atype or "assignment")
 
         # Step 5: Place study blocks into free blocks
         remaining_hours = hours_for_this_assignment_today
@@ -132,8 +174,15 @@ def propose_assignment_blocks_for_today(
                 if time_until_free_end < MIN_BLOCK_MINUTES / 60.0:
                     break  # Not enough time left in this free block
 
+                # Flexible block duration based on assignment needs
+                # Try to create blocks that match assignment type:
+                # - Exams: prefer 1.5-2h blocks
+                # - Complex assignments: prefer 1.5h blocks
+                # - Others: 1h blocks are fine
+                preferred_block_size = estimated if estimated <= 2.0 else 1.5
+
                 block_hours = min(
-                    DEFAULT_BLOCK_HOURS,
+                    preferred_block_size,
                     remaining_hours,
                     time_until_free_end
                 )
