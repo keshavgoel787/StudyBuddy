@@ -11,13 +11,14 @@ from app.schemas.notes import (
     NoteUploadResponse,
     StudyMaterialResponse,
     GenerateStudyRequest,
+    CombineNotesRequest,
     NoteDocumentResponse
 )
 from app.utils.auth_middleware import get_current_user
 from app.utils.rate_limiter import limiter
 from app.services.storage import save_uploaded_file, get_file_path
 from app.services.ocr_service import extract_text_from_image
-from app.services.gemini_service import generate_study_material
+from app.services.gemini_service import generate_study_material, generate_combined_study_guide
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -262,3 +263,92 @@ async def get_study_material(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch study material: {str(e)}")
+
+
+@router.post("/combine-notes", response_model=StudyMaterialResponse)
+@limiter.limit("5/hour")  # Limit to 5 combinations per hour per user (more expensive operation)
+async def combine_notes(
+    request: Request,
+    body: CombineNotesRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Combine multiple notes into one comprehensive study guide.
+
+    This endpoint generates a unified study guide that synthesizes information
+    from multiple note documents, showing connections between concepts.
+
+    Rate limited to 5 requests per hour to prevent API abuse.
+    """
+    try:
+        # Validate that at least 2 notes are provided
+        if len(body.note_document_ids) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="Please provide at least 2 notes to combine"
+            )
+
+        if len(body.note_document_ids) > 10:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot combine more than 10 notes at once"
+            )
+
+        # Fetch all note documents and verify ownership
+        note_docs = []
+        for note_id in body.note_document_ids:
+            note_doc = db.query(NoteDocument).filter(
+                NoteDocument.id == note_id,
+                NoteDocument.user_id == current_user.id
+            ).first()
+
+            if not note_doc:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Note document {note_id} not found or you don't have access"
+                )
+
+            note_docs.append(note_doc)
+
+        # Extract texts and titles
+        note_texts = [doc.extracted_text for doc in note_docs]
+        note_titles = [doc.title for doc in note_docs]
+
+        # Validate that all notes have content
+        for i, text in enumerate(note_texts):
+            if not text or len(text.strip()) < 10:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Note '{note_titles[i]}' has insufficient content to combine"
+                )
+
+        # Generate combined study guide using Gemini (async wrapper)
+        import asyncio
+        topic_hint = body.topic_hint if hasattr(body, 'topic_hint') else None
+        combined_material = await asyncio.to_thread(
+            generate_combined_study_guide,
+            note_texts,
+            note_titles,
+            topic_hint
+        )
+
+        # Return the combined study guide (we don't save it to DB since it's a temporary combination)
+        return StudyMaterialResponse(
+            summary_short=combined_material['summary_short'],
+            summary_detailed=combined_material['summary_detailed'],
+            flashcards=combined_material['flashcards'],
+            practice_questions=combined_material['practice_questions']
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Log the full error for debugging
+        import traceback
+        print(f"ERROR in combine_notes: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to combine notes: {str(e)}"
+        )

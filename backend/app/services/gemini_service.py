@@ -268,6 +268,147 @@ Make the questions challenging but fair, appropriate for the academic level and 
         raise Exception(f"Gemini API call failed: {str(e)}")
 
 
+def generate_combined_study_guide(note_texts: List[str], note_titles: List[str], topic_hint: str = None) -> Dict[str, Any]:
+    """
+    Generate a comprehensive study guide by combining multiple notes.
+
+    Args:
+        note_texts: List of extracted text from each note document
+        note_titles: List of titles for each note (for context)
+        topic_hint: Optional hint about the overall topic/subject
+
+    Returns a dictionary with:
+    - summary_short: str
+    - summary_detailed: str
+    - flashcards: List[Dict]
+    - practice_questions: List[Dict]
+    """
+
+    # Validate input
+    if not note_texts or len(note_texts) == 0:
+        raise Exception("No notes provided to combine")
+
+    if len(note_texts) != len(note_titles):
+        raise Exception("Mismatch between number of note texts and titles")
+
+    # Sanitize all texts
+    sanitized_texts = [sanitize_text_for_prompt(text) for text in note_texts]
+
+    # Build combined notes section with titles for context
+    combined_notes_section = ""
+    for i, (title, text) in enumerate(zip(note_titles, sanitized_texts), 1):
+        combined_notes_section += f"\n\n--- NOTE {i}: {title} ---\n{text}"
+
+    # Build the prompt with topic awareness
+    topic_context = ""
+    if topic_hint:
+        topic_context = f"\n\nTOPIC/SUBJECT: {topic_hint}\nUse this as context to create a unified study guide that connects concepts across all notes."
+    else:
+        topic_context = "\n\nAnalyze all notes to identify common themes, subject area, and how the topics relate to each other. Create a unified study guide."
+
+    prompt = f"""You are an intelligent study assistant helping a student create a comprehensive study guide by combining multiple sets of notes.
+
+You will receive {len(note_texts)} different notes. Your task is to:
+1. Analyze all notes together to identify overarching themes and connections
+2. Create a unified, comprehensive study guide that synthesizes information from all notes
+3. Highlight relationships between concepts across different notes
+4. Generate integrated flashcards and practice questions that span multiple notes{topic_context}
+
+NOTES TO COMBINE:{combined_notes_section}
+
+Generate a COMPREHENSIVE study guide that SYNTHESIZES all the notes above. This should be more than just a collection - it should show how concepts connect and build on each other.
+
+Return ONLY valid JSON in this exact format:
+{{
+  "summary_short": "Brief 3-4 sentence overview of ALL topics covered across all notes",
+  "summary_detailed": "Comprehensive 2-3 paragraph synthesis that shows how all the notes relate to each other, highlighting key themes, connections, and important concepts across all materials",
+  "flashcards": [
+    {{"question": "Question that may integrate concepts from multiple notes?", "answer": "Answer here"}},
+    ... (15-25 flashcards total, mixing individual concepts and integrated questions)
+  ],
+  "practice_questions": [
+    {{
+      "question": "Question that tests understanding across topics?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correct_index": 0,
+      "explanation": "Explanation that may reference concepts from multiple notes"
+    }},
+    ... (8-12 practice questions that test both individual and integrated understanding)
+  ]
+}}
+
+Make the study guide comprehensive, showing connections between topics. Include both detail-focused and synthesis questions."""
+
+    try:
+        model = genai.GenerativeModel('gemini-flash-latest')
+
+        # Configure safety settings to be more permissive for educational content
+        safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
+
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(
+                temperature=0.7,
+                response_mime_type="application/json"
+            ),
+            safety_settings=safety_settings
+        )
+
+        # Check if response was blocked or empty
+        if not response.candidates:
+            raise Exception("Gemini did not return any response. The content may have been blocked by safety filters.")
+
+        # Check for safety ratings that blocked the response
+        candidate = response.candidates[0]
+        if hasattr(candidate, 'finish_reason') and candidate.finish_reason not in [1, 0]:
+            finish_reason_name = candidate.finish_reason.name if hasattr(candidate.finish_reason, 'name') else str(candidate.finish_reason)
+            raise Exception(f"Gemini response was blocked. Finish reason: {finish_reason_name}")
+
+        # Safely extract text from response
+        try:
+            response_text = response.text
+        except (TypeError, AttributeError, ValueError) as e:
+            log_error("gemini_service", "Cannot access response.text", e)
+            if response.candidates and response.candidates[0].content.parts:
+                try:
+                    response_text = response.candidates[0].content.parts[0].text
+                    log_debug("gemini_service", "Extracted text from parts", chars=len(response_text))
+                except Exception as parts_error:
+                    log_error("gemini_service", "Cannot extract text from parts", parts_error)
+                    raise Exception(f"Cannot extract text from Gemini response. Original error: {str(e)}")
+            else:
+                raise Exception(f"Gemini response has no valid content. Error: {str(e)}")
+
+        # Parse JSON response using robust parsing
+        try:
+            result = parse_gemini_json_response(response_text)
+        except Exception as parse_error:
+            log_error("gemini_service", "Failed to parse Gemini response", parse_error)
+            log_debug("gemini_service", "Response preview",
+                     length=len(response_text),
+                     preview=response_text[:1000])
+            raise Exception(f"Failed to parse Gemini response as JSON: {str(parse_error)}")
+
+        # Validate response structure
+        required_keys = ["summary_short", "summary_detailed", "flashcards", "practice_questions"]
+        for key in required_keys:
+            if key not in result:
+                raise Exception(f"Gemini response missing required field: {key}")
+
+        return result
+
+    except Exception as e:
+        # Don't wrap exceptions that are already our custom exceptions
+        if "Failed to parse Gemini response" in str(e) or "Gemini response missing required field" in str(e) or "Gemini" in str(e):
+            raise
+        raise Exception(f"Gemini API call failed: {str(e)}")
+
+
 def generate_day_plan(
     date: str,
     events: List[CalendarEvent],

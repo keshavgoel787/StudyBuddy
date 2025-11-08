@@ -41,3 +41,9 @@ class StudyMaterialResponse(BaseModel):
 class GenerateStudyRequest(BaseModel):
     note_document_id: UUID
     topic_hint: Optional[str] = None
+
+
+class CombineNotesRequest(BaseModel):
+    note_document_ids: List[UUID]
+    combined_title: Optional[str] = None
+    topic_hint: Optional[str] = None
