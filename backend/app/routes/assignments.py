@@ -63,7 +63,6 @@ async def create_assignment(
 
         # Invalidate day plan cache since assignments changed
         invalidate_day_plan_cache(db, current_user.id)
-        db.commit()
 
         return db_assignment
 
@@ -103,7 +102,6 @@ async def update_assignment(
 
         # Invalidate day plan cache since assignments changed
         invalidate_day_plan_cache(db, current_user.id)
-        db.commit()
 
         return db_assignment
 
@@ -139,7 +137,6 @@ async def delete_assignment(
 
         # Invalidate day plan cache since assignments changed
         invalidate_day_plan_cache(db, current_user.id)
-        db.commit()
 
         return None
 

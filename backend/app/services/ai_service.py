@@ -87,41 +87,40 @@ def generate_completion(
             log_info("ai_service", "Groq API call successful")
             return response.choices[0].message.content
         except Exception as e:
-            log_error("ai_service", f"Groq API failed: {str(e)}")
-            raise Exception(f"Groq API failed: {str(e)}")
+            log_error("ai_service", f"Groq API failed: {str(e)}, trying fallback")
 
-    # # Try OpenAI GPT-4o-mini (reliable)
-    # openai_client = _get_openai_client()
-    # if openai_client:
-    #     try:
-    #         log_info("ai_service", "Attempting OpenAI API call")
-    #         response = openai_client.chat.completions.create(
-    #             model="gpt-4o-mini",
-    #             messages=[{"role": "user", "content": prompt}],
-    #             temperature=temperature,
-    #             response_format={"type": "json_object"} if response_format == "json" else {"type": "text"}
-    #         )
-    #         log_info("ai_service", "OpenAI API call successful")
-    #         return response.choices[0].message.content
-    #     except Exception as e:
-    #         log_error("ai_service", f"OpenAI API failed: {str(e)}")
+    # Try OpenAI GPT-4o-mini (reliable)
+    openai_client = _get_openai_client()
+    if openai_client:
+        try:
+            log_info("ai_service", "Attempting OpenAI API call")
+            response = openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperature,
+                response_format={"type": "json_object"} if response_format == "json" else {"type": "text"}
+            )
+            log_info("ai_service", "OpenAI API call successful")
+            return response.choices[0].message.content
+        except Exception as e:
+            log_error("ai_service", f"OpenAI API failed: {str(e)}, trying Gemini fallback")
 
-    # # Fallback to Gemini
-    # try:
-    #     log_info("ai_service", "Attempting Gemini API call (fallback)")
-    #     model = genai.GenerativeModel(
-    #         model_name='gemini-flash-latest',
-    #         generation_config={
-    #             "temperature": temperature,
-    #             "response_mime_type": "application/json" if response_format == "json" else "text/plain"
-    #         }
-    #     )
-    #     response = model.generate_content(prompt)
-    #     log_info("ai_service", "Gemini API call successful")
-    #     return response.text
-    # except Exception as e:
-    #     log_error("ai_service", f"Gemini API failed: {str(e)}")
-    #     raise Exception(f"All AI providers failed. Last error: {str(e)}")
+    # Fallback to Gemini
+    try:
+        log_info("ai_service", "Attempting Gemini API call (fallback)")
+        model = genai.GenerativeModel(
+            model_name='gemini-flash-latest',
+            generation_config={
+                "temperature": temperature,
+                "response_mime_type": "application/json" if response_format == "json" else "text/plain"
+            }
+        )
+        response = model.generate_content(prompt)
+        log_info("ai_service", "Gemini API call successful")
+        return response.text
+    except Exception as e:
+        log_error("ai_service", f"Gemini API failed: {str(e)}")
+        raise Exception(f"All AI providers failed. Last error: {str(e)}")
 
 
 def generate_json_completion(prompt: str, temperature: float = 0.7) -> dict[str, Any]:

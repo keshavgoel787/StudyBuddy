@@ -4,7 +4,7 @@ Separates prompt logic from service logic for better maintainability.
 """
 
 from typing import List
-from datetime import datetime, date
+from datetime import datetime
 import re
 
 from app.schemas.calendar import CalendarEvent, FreeBlock
@@ -32,6 +32,10 @@ def build_day_plan_prompt(
     upcoming_exams = []
     upcoming_quizzes = []
     upcoming_other = []
+    urgent_exams = []
+    urgent_quizzes = []
+    urgent_other = []
+    future_exams = []
 
     if assignments:
         for assignment in assignments:
@@ -58,10 +62,18 @@ def build_day_plan_prompt(
             atype = (assignment.assignment_type or '').lower()
             if 'exam' in atype:
                 upcoming_exams.append(assignment_info)
+                if days_until_due <= 5:
+                    urgent_exams.append(assignment_info)
+                else:
+                    future_exams.append(assignment_info)
             elif 'quiz' in atype:
                 upcoming_quizzes.append(assignment_info)
+                if days_until_due <= 3:
+                    urgent_quizzes.append(assignment_info)
             else:
                 upcoming_other.append(assignment_info)
+                if days_until_due <= 5 and assignment.priority >= 2:
+                    urgent_other.append(assignment_info)
 
     # Compact event formatting
     def format_time_range(start: datetime, end: datetime) -> str:
@@ -97,25 +109,21 @@ def build_day_plan_prompt(
         prompt_parts.append("**Upcoming Assignments:**")
 
         # Very urgent exams (0-5 days)
-        urgent_exams = [a for a in upcoming_exams if a['days_until_due'] <= 5]
         if urgent_exams:
             exam_list = [f"{a['title']} in {a['days_until_due']}d" for a in urgent_exams]
             prompt_parts.append(f"- URGENT EXAMS: {', '.join(exam_list)}")
 
         # Upcoming exams (6-14 days)
-        future_exams = [a for a in upcoming_exams if a['days_until_due'] > 5]
         if future_exams:
             exam_list = [f"{a['title']} in {a['days_until_due']}d" for a in future_exams]
             prompt_parts.append(f"- Upcoming exams: {', '.join(exam_list)}")
 
         # Urgent quizzes (0-3 days)
-        urgent_quizzes = [a for a in upcoming_quizzes if a['days_until_due'] <= 3]
         if urgent_quizzes:
             quiz_list = [f"{a['title']} in {a['days_until_due']}d" for a in urgent_quizzes]
             prompt_parts.append(f"- Urgent quizzes: {', '.join(quiz_list)}")
 
         # High priority other assignments (0-5 days)
-        urgent_other = [a for a in upcoming_other if a['days_until_due'] <= 5 and a['priority'] >= 2]
         if urgent_other:
             other_list = [f"{a['title']} ({a['type']}) in {a['days_until_due']}d" for a in urgent_other]
             prompt_parts.append(f"- Other urgent: {', '.join(other_list)}")

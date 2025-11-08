@@ -16,7 +16,7 @@ from app.schemas.events import (
 )
 from app.utils.auth_middleware import get_current_user
 from app.utils.token_refresh import get_valid_user_token
-from app.utils.cache import cleanup_old_day_plans
+from app.utils.cache import cleanup_old_day_plans, invalidate_day_plan_cache
 from app.services.google_calendar import (
     get_todays_events, create_calendar_event,
     create_assignment_block_event, create_bus_event, delete_calendar_event
@@ -280,9 +280,7 @@ async def create_event(
         )
 
         # Invalidate day plan cache so next fetch gets fresh data
-        from app.utils.cache import invalidate_day_plan_cache
-        from datetime import date
-        invalidate_day_plan_cache(db, str(current_user.id), date.today())
+        invalidate_day_plan_cache(db, current_user.id, date.today())
 
         return EventCreateResponse(
             event_id=event_id,
@@ -328,9 +326,7 @@ async def sync_assignment_block(
         )
 
         # Invalidate day plan cache so next fetch gets fresh data
-        from app.utils.cache import invalidate_day_plan_cache
-        from datetime import date
-        invalidate_day_plan_cache(db, str(current_user.id), date.today())
+        invalidate_day_plan_cache(db, current_user.id, date.today())
 
         return EventCreateResponse(
             event_id=event_id,
@@ -378,9 +374,7 @@ async def sync_bus(
         )
 
         # Invalidate day plan cache so next fetch gets fresh data
-        from app.utils.cache import invalidate_day_plan_cache
-        from datetime import date
-        invalidate_day_plan_cache(db, str(current_user.id), date.today())
+        invalidate_day_plan_cache(db, current_user.id, date.today())
 
         return EventCreateResponse(
             event_id=event_id,
@@ -430,9 +424,7 @@ async def delete_event(
         )
 
         # Invalidate day plan cache so next fetch gets fresh data
-        from app.utils.cache import invalidate_day_plan_cache
-        from datetime import date
-        invalidate_day_plan_cache(db, str(current_user.id), date.today())
+        invalidate_day_plan_cache(db, current_user.id, date.today())
 
         return EventDeleteResponse(
             success=True,

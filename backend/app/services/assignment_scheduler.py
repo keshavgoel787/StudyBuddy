@@ -4,7 +4,6 @@ Service for scheduling assignments into the calendar.
 
 from datetime import datetime, date, time, timedelta
 from typing import List
-import uuid
 
 from app.schemas.calendar import CalendarEvent, FreeBlock
 from app.models.assignment import Assignment
@@ -47,9 +46,9 @@ def propose_assignment_blocks_for_today(
     # Step 1: Filter to incomplete assignments that are due >= today
     today_midnight = datetime.combine(today, time.min)
     if today_midnight.tzinfo is None:
-        # Make timezone-aware if needed (use UTC as default)
-        from datetime import timezone
-        today_midnight = today_midnight.replace(tzinfo=timezone.utc)
+        # Make timezone-aware if needed (use EST for consistency with codebase)
+        from zoneinfo import ZoneInfo
+        today_midnight = today_midnight.replace(tzinfo=ZoneInfo("America/New_York"))
 
     eligible_assignments = [
         a for a in assignments
