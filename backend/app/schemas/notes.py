@@ -47,3 +47,4 @@ class CombineNotesRequest(BaseModel):
     note_document_ids: List[UUID]
     combined_title: Optional[str] = None
     topic_hint: Optional[str] = None
+    save_to_library: bool = False  # Whether to save combined notes to library

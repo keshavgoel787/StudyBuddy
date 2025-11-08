@@ -333,7 +333,39 @@ async def combine_notes(
             topic_hint
         )
 
-        # Return the combined study guide (we don't save it to DB since it's a temporary combination)
+        # If user wants to save to library, create a new note document and study material
+        if body.save_to_library:
+            # Generate combined title
+            combined_title = body.combined_title if body.combined_title else f"Combined: {', '.join(note_titles[:3])}{'...' if len(note_titles) > 3 else ''}"
+
+            # Create combined text from all notes
+            combined_text = "\n\n=== COMBINED NOTES ===\n\n"
+            for title, text in zip(note_titles, note_texts):
+                combined_text += f"\n--- {title} ---\n{text}\n"
+
+            # Create note document
+            note_doc = NoteDocument(
+                user_id=current_user.id,
+                title=combined_title,
+                original_file_url=None,  # No file for combined notes
+                extracted_text=combined_text
+            )
+            db.add(note_doc)
+            db.flush()  # Get the ID without committing
+
+            # Save study material
+            study_material = StudyMaterial(
+                note_document_id=note_doc.id,
+                summary_short=combined_material['summary_short'],
+                summary_detailed=combined_material['summary_detailed'],
+                flashcards=combined_material['flashcards'],
+                practice_questions=combined_material['practice_questions']
+            )
+            db.add(study_material)
+            db.commit()
+            db.refresh(note_doc)
+
+        # Return the combined study guide
         return StudyMaterialResponse(
             summary_short=combined_material['summary_short'],
             summary_detailed=combined_material['summary_detailed'],

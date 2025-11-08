@@ -106,11 +106,24 @@ export const invalidateNotesCache = () => {
 };
 
 // Combine multiple notes into one study guide
-export const combineNotes = async (noteIds: string[], topicHint?: string) => {
+export const combineNotes = async (
+  noteIds: string[],
+  topicHint?: string,
+  saveToLibrary?: boolean,
+  combinedTitle?: string
+) => {
   const response = await api.post('/notes/combine-notes', {
     note_document_ids: noteIds,
-    topic_hint: topicHint
+    topic_hint: topicHint,
+    save_to_library: saveToLibrary || false,
+    combined_title: combinedTitle
   });
+
+  // Invalidate cache if saved to library
+  if (saveToLibrary) {
+    apiCache.invalidate('notes:all');
+  }
+
   return response.data;
 };
 

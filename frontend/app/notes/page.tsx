@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { FloatingFlower } from '@/components/AnimatedFlower';
-import { ArrowLeft, BookOpen, Trash2, Eye, Calendar as CalendarIcon, Layers } from 'lucide-react';
+import { ArrowLeft, BookOpen, Trash2, Eye, Calendar as CalendarIcon, Layers, Save } from 'lucide-react';
 import { getAllNotes, deleteNote, combineNotes } from '@/lib/api';
 
 interface Note {
@@ -19,9 +19,11 @@ interface CombinedStudyViewProps {
   material: any;
   onClose: () => void;
   selectedNotesTitles: string[];
+  onSave: () => void;
+  isSaved: boolean;
 }
 
-function CombinedStudyView({ material, onClose, selectedNotesTitles }: CombinedStudyViewProps) {
+function CombinedStudyView({ material, onClose, selectedNotesTitles, onSave, isSaved }: CombinedStudyViewProps) {
   const [activeTab, setActiveTab] = useState<'summary' | 'flashcards' | 'practice'>('summary');
 
   return (
@@ -36,10 +38,24 @@ function CombinedStudyView({ material, onClose, selectedNotesTitles }: CombinedS
             <p className="text-mauve/80">
               Synthesized from {selectedNotesTitles.length} notes: {selectedNotesTitles.join(', ')}
             </p>
+            {isSaved && (
+              <p className="text-sage text-sm mt-2 flex items-center gap-1">
+                <Save className="w-4 h-4" />
+                Saved to your notes library!
+              </p>
+            )}
           </div>
-          <Button variant="outline" onClick={onClose}>
-            Back to Notes
-          </Button>
+          <div className="flex gap-2">
+            {!isSaved && (
+              <Button variant="primary" onClick={onSave}>
+                <Save className="w-4 h-4 mr-2" />
+                Save to Library
+              </Button>
+            )}
+            <Button variant="outline" onClick={onClose}>
+              Back to Notes
+            </Button>
+          </div>
         </div>
       </Card>
 
@@ -160,6 +176,7 @@ export default function NotesLibrary() {
   const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
   const [combining, setCombining] = useState(false);
   const [combinedMaterial, setCombinedMaterial] = useState<any>(null);
+  const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
     loadNotes();
@@ -230,6 +247,27 @@ export default function NotesLibrary() {
     setCombineMode(false);
     setSelectedNotes([]);
     setCombinedMaterial(null);
+    setIsSaved(false);
+    // Reload notes to show the new combined note if it was saved
+    loadNotes();
+  };
+
+  const handleSaveCombinedNotes = async () => {
+    const selectedNoteTitles = notes.filter(n => selectedNotes.includes(n.id)).map(n => n.title);
+    const defaultTitle = `Combined: ${selectedNoteTitles.slice(0, 3).join(', ')}${selectedNoteTitles.length > 3 ? '...' : ''}`;
+
+    const title = prompt('Enter a title for the combined notes:', defaultTitle);
+    if (!title) return; // User cancelled
+
+    try {
+      await combineNotes(selectedNotes, undefined, true, title);
+      setIsSaved(true);
+      // Reload notes list to show the new combined note
+      await loadNotes();
+    } catch (error) {
+      console.error('Failed to save combined notes:', error);
+      alert('Failed to save combined notes. Please try again.');
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -394,6 +432,8 @@ export default function NotesLibrary() {
             material={combinedMaterial}
             onClose={cancelCombineMode}
             selectedNotesTitles={notes.filter(n => selectedNotes.includes(n.id)).map(n => n.title)}
+            onSave={handleSaveCombinedNotes}
+            isSaved={isSaved}
           />
         )}
       </div>
