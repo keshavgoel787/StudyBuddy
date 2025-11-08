@@ -79,7 +79,7 @@ def generate_completion(
         try:
             log_info("ai_service", "Attempting Groq API call")
             response = groq_client.chat.completions.create(
-                model="openai/gpt-oss-20b",
+                model="groq/compound",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=temperature,
                 response_format={"type": "json_object"} if response_format == "json" else {"type": "text"}
