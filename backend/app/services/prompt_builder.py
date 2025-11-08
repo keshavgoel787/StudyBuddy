@@ -66,18 +66,22 @@ def build_day_plan_prompt(
 
     prompt_parts.extend([
         "",
-        "Generate:",
-        "1. Lunch windows (11AM-2PM, 30-60min)",
-        "2. Extra study slots (ONLY if free time available)",
-        "3. Commute timing",
-        "4. Warm summary highlighting assigned study blocks & bus times",
+        "Generate personalized day plan for Dippi:",
+        "1. **Lunch slots**: Suggest 1-2 realistic lunch times (11AM-2PM, 30-60min) based on class schedule. If no classes, suggest just ONE midday lunch.",
+        "2. **Study slots**: ONLY suggest if there are NO scheduled study blocks AND significant free time (2+ hours) AND there are upcoming exams. Otherwise leave empty.",
+        "3. **Commute**: If bus times provided, remind about commute. Otherwise omit.",
+        "4. **Summary**: Warm, friendly message starting with 'Hey Dippi,' that:",
+        "   - Highlights scheduled study blocks if any exist",
+        "   - Mentions bus/commute times if relevant",
+        "   - Encourages her to enjoy free time if day is light",
+        "   - End with '<3' or similar warm sign-off",
         "",
         f"JSON format (use date {date} for all datetimes):",
         "{",
         f'  "lunch_slots": [{{"start": "{date}T12:00:00", "end": "{date}T13:00:00", "label": "12:00 PM - 1:00 PM"}}],',
-        '  "study_slots": [...],',
-        f'  "commute_suggestion": {{"leave_by": "{date}T19:15:00", "leave_by_label": "7:15 PM", "reason": "..."}},',
-        '  "summary": "..."',
+        '  "study_slots": [],  // EMPTY if study blocks already scheduled',
+        f'  "commute_suggestion": {{"leave_by": "{date}T19:15:00", "leave_by_label": "7:15 PM", "reason": "Catch evening bus home"}} OR null,',
+        '  "summary": "Hey Dippi, ..."',
         "}"
     ])
 

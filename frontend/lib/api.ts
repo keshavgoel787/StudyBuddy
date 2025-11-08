@@ -109,6 +109,7 @@ export const invalidateNotesCache = () => {
 export interface AssignmentCreate {
   title: string;
   description?: string;
+  assignment_type?: string;
   due_date: string; // ISO datetime string
   estimated_hours?: number;
   priority?: number; // 1=low, 2=medium, 3=high
@@ -117,6 +118,7 @@ export interface AssignmentCreate {
 export interface AssignmentUpdate {
   title?: string;
   description?: string;
+  assignment_type?: string;
   due_date?: string;
   estimated_hours?: number;
   priority?: number;
@@ -128,6 +130,7 @@ export interface Assignment {
   user_id: string;
   title: string;
   description?: string;
+  assignment_type?: string;
   due_date: string;
   estimated_hours: number;
   priority: number;

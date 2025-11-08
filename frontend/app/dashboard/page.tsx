@@ -61,6 +61,7 @@ export default function Dashboard() {
   const [newAssignment, setNewAssignment] = useState({
     title: '',
     description: '',
+    assignment_type: '',
     due_date: '',
     estimated_hours: 1,
     priority: 2
@@ -132,6 +133,7 @@ export default function Dashboard() {
       const assignmentData: AssignmentCreate = {
         title: newAssignment.title,
         description: newAssignment.description || undefined,
+        assignment_type: newAssignment.assignment_type || undefined,
         due_date: new Date(newAssignment.due_date).toISOString(),
         estimated_hours: newAssignment.estimated_hours,
         priority: newAssignment.priority
@@ -141,6 +143,7 @@ export default function Dashboard() {
       setNewAssignment({
         title: '',
         description: '',
+        assignment_type: '',
         due_date: '',
         estimated_hours: 1,
         priority: 2
@@ -752,6 +755,25 @@ export default function Dashboard() {
                   className="w-full px-4 py-2 rounded-lg border border-mauve/30 focus:outline-none focus:border-lavender resize-none"
                   rows={3}
                 />
+                <div>
+                  <label className="text-sm text-mauve mb-1 block">Assignment Type</label>
+                  <select
+                    value={newAssignment.assignment_type}
+                    onChange={(e) => setNewAssignment({ ...newAssignment, assignment_type: e.target.value })}
+                    className="w-full px-4 py-2 rounded-lg border border-mauve/30 focus:outline-none focus:border-lavender"
+                  >
+                    <option value="">Select type (optional)</option>
+                    <option value="exam">Exam</option>
+                    <option value="quiz">Quiz</option>
+                    <option value="lab_report">Lab Report</option>
+                    <option value="homework">Homework</option>
+                    <option value="project">Project</option>
+                    <option value="essay">Essay</option>
+                    <option value="presentation">Presentation</option>
+                    <option value="reading">Reading</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
                 <div className="grid md:grid-cols-3 gap-3">
                   <div>
                     <label className="text-sm text-mauve mb-1 block">Due Date</label>
