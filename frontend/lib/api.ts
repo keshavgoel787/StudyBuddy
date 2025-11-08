@@ -105,6 +105,15 @@ export const invalidateNotesCache = () => {
   apiCache.invalidatePattern(/^notes:/);
 };
 
+// Combine multiple notes into one study guide
+export const combineNotes = async (noteIds: string[], topicHint?: string) => {
+  const response = await api.post('/notes/combine-notes', {
+    note_document_ids: noteIds,
+    topic_hint: topicHint
+  });
+  return response.data;
+};
+
 // Assignments
 export interface AssignmentCreate {
   title: string;
