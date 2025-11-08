@@ -197,75 +197,23 @@ Return ONLY valid JSON in this exact format:
 Make the questions challenging but fair, appropriate for the academic level and subject area."""
 
     try:
-        model = genai.GenerativeModel('gemini-flash-latest')
-
-        # Configure safety settings to be more permissive for educational content
-        safety_settings = [
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-        ]
-
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.GenerationConfig(
-                temperature=0.7,
-                response_mime_type="application/json"
-            ),
-            safety_settings=safety_settings
-        )
-
-        # Check if response was blocked or empty
-        if not response.candidates:
-            raise Exception("Gemini did not return any response. The content may have been blocked by safety filters.")
-
-        # Check for safety ratings that blocked the response
-        candidate = response.candidates[0]
-        if hasattr(candidate, 'finish_reason') and candidate.finish_reason not in [1, 0]:  # 1 = STOP (normal), 0 = UNSPECIFIED
-            finish_reason_name = candidate.finish_reason.name if hasattr(candidate.finish_reason, 'name') else str(candidate.finish_reason)
-            raise Exception(f"Gemini response was blocked. Finish reason: {finish_reason_name}")
-
-        # Safely extract text from response
-        try:
-            response_text = response.text
-        except (TypeError, AttributeError, ValueError) as e:
-            # If response.text fails, try to extract from parts directly
-            log_error("gemini_service", "Cannot access response.text", e)
-            if response.candidates and response.candidates[0].content.parts:
-                try:
-                    response_text = response.candidates[0].content.parts[0].text
-                    log_debug("gemini_service", "Extracted text from parts", chars=len(response_text))
-                except Exception as parts_error:
-                    log_error("gemini_service", "Cannot extract text from parts", parts_error)
-                    raise Exception(f"Cannot extract text from Gemini response. Original error: {str(e)}")
-            else:
-                raise Exception(f"Gemini response has no valid content. Error: {str(e)}")
-
-        # Parse JSON response using robust parsing
-        try:
-            result = parse_gemini_json_response(response_text)
-        except Exception as parse_error:
-            # Log the full response for debugging
-            log_error("gemini_service", "Failed to parse Gemini response", parse_error)
-            log_debug("gemini_service", "Response preview",
-                     length=len(response_text),
-                     preview=response_text[:1000])
-            raise Exception(f"Failed to parse Gemini response as JSON: {str(parse_error)}")
+        # Use the faster AI service with Groq fallback (much faster than Gemini alone)
+        from app.services.ai_service import generate_json_completion
+        result = generate_json_completion(prompt, temperature=0.7)
 
         # Validate response structure
         required_keys = ["summary_short", "summary_detailed", "flashcards", "practice_questions"]
         for key in required_keys:
             if key not in result:
-                raise Exception(f"Gemini response missing required field: {key}")
+                raise Exception(f"AI response missing required field: {key}")
 
         return result
 
     except Exception as e:
         # Don't wrap exceptions that are already our custom exceptions
-        if "Failed to parse Gemini response" in str(e) or "Gemini response missing required field" in str(e) or "Gemini" in str(e):
+        if "missing required field" in str(e):
             raise
-        raise Exception(f"Gemini API call failed: {str(e)}")
+        raise Exception(f"AI API call failed: {str(e)}")
 
 
 def generate_combined_study_guide(note_texts: List[str], note_titles: List[str], topic_hint: str = None) -> Dict[str, Any]:
@@ -340,73 +288,23 @@ Return ONLY valid JSON in this exact format:
 Make the study guide comprehensive, showing connections between topics. Include both detail-focused and synthesis questions."""
 
     try:
-        model = genai.GenerativeModel('gemini-flash-latest')
-
-        # Configure safety settings to be more permissive for educational content
-        safety_settings = [
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-        ]
-
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.GenerationConfig(
-                temperature=0.7,
-                response_mime_type="application/json"
-            ),
-            safety_settings=safety_settings
-        )
-
-        # Check if response was blocked or empty
-        if not response.candidates:
-            raise Exception("Gemini did not return any response. The content may have been blocked by safety filters.")
-
-        # Check for safety ratings that blocked the response
-        candidate = response.candidates[0]
-        if hasattr(candidate, 'finish_reason') and candidate.finish_reason not in [1, 0]:
-            finish_reason_name = candidate.finish_reason.name if hasattr(candidate.finish_reason, 'name') else str(candidate.finish_reason)
-            raise Exception(f"Gemini response was blocked. Finish reason: {finish_reason_name}")
-
-        # Safely extract text from response
-        try:
-            response_text = response.text
-        except (TypeError, AttributeError, ValueError) as e:
-            log_error("gemini_service", "Cannot access response.text", e)
-            if response.candidates and response.candidates[0].content.parts:
-                try:
-                    response_text = response.candidates[0].content.parts[0].text
-                    log_debug("gemini_service", "Extracted text from parts", chars=len(response_text))
-                except Exception as parts_error:
-                    log_error("gemini_service", "Cannot extract text from parts", parts_error)
-                    raise Exception(f"Cannot extract text from Gemini response. Original error: {str(e)}")
-            else:
-                raise Exception(f"Gemini response has no valid content. Error: {str(e)}")
-
-        # Parse JSON response using robust parsing
-        try:
-            result = parse_gemini_json_response(response_text)
-        except Exception as parse_error:
-            log_error("gemini_service", "Failed to parse Gemini response", parse_error)
-            log_debug("gemini_service", "Response preview",
-                     length=len(response_text),
-                     preview=response_text[:1000])
-            raise Exception(f"Failed to parse Gemini response as JSON: {str(parse_error)}")
+        # Use the faster AI service with Groq fallback (much faster than Gemini alone)
+        from app.services.ai_service import generate_json_completion
+        result = generate_json_completion(prompt, temperature=0.7)
 
         # Validate response structure
         required_keys = ["summary_short", "summary_detailed", "flashcards", "practice_questions"]
         for key in required_keys:
             if key not in result:
-                raise Exception(f"Gemini response missing required field: {key}")
+                raise Exception(f"AI response missing required field: {key}")
 
         return result
 
     except Exception as e:
         # Don't wrap exceptions that are already our custom exceptions
-        if "Failed to parse Gemini response" in str(e) or "Gemini response missing required field" in str(e) or "Gemini" in str(e):
+        if "missing required field" in str(e):
             raise
-        raise Exception(f"Gemini API call failed: {str(e)}")
+        raise Exception(f"AI API call failed: {str(e)}")
 
 
 def generate_day_plan(
