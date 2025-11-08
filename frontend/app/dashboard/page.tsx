@@ -63,7 +63,7 @@ export default function Dashboard() {
     description: '',
     assignment_type: '',
     due_date: '',
-    estimated_hours: 1,
+    estimated_hours: '',
     priority: 2
   });
   const [syncedEvents, setSyncedEvents] = useState<Set<string>>(new Set());
@@ -135,7 +135,7 @@ export default function Dashboard() {
         description: newAssignment.description || undefined,
         assignment_type: newAssignment.assignment_type || undefined,
         due_date: new Date(newAssignment.due_date).toISOString(),
-        estimated_hours: newAssignment.estimated_hours,
+        estimated_hours: newAssignment.estimated_hours ? parseFloat(newAssignment.estimated_hours) : undefined,
         priority: newAssignment.priority
       };
 
@@ -145,7 +145,7 @@ export default function Dashboard() {
         description: '',
         assignment_type: '',
         due_date: '',
-        estimated_hours: 1,
+        estimated_hours: '',
         priority: 2
       });
       setShowNewAssignmentForm(false);
@@ -785,13 +785,14 @@ export default function Dashboard() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm text-mauve mb-1 block">Estimated Hours</label>
+                    <label className="text-sm text-mauve mb-1 block">Estimated Hours (optional)</label>
                     <input
                       type="number"
                       min="0.1"
                       step="0.5"
+                      placeholder="Leave blank for AI to suggest"
                       value={newAssignment.estimated_hours}
-                      onChange={(e) => setNewAssignment({ ...newAssignment, estimated_hours: parseFloat(e.target.value) })}
+                      onChange={(e) => setNewAssignment({ ...newAssignment, estimated_hours: e.target.value })}
                       className="w-full px-4 py-2 rounded-lg border border-mauve/30 focus:outline-none focus:border-lavender"
                     />
                   </div>

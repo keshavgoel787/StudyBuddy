@@ -114,6 +114,7 @@ def _generate_recommendations(data: DayPlanData) -> Recommendations:
         date=data.today.strftime("%Y-%m-%d"),
         events=data.events,
         free_blocks=data.free_blocks,
+        assignments=data.assignments,
         commute_duration_minutes=30,
         morning_bus_time=morning_bus_time,
         evening_bus_time=evening_bus_time,

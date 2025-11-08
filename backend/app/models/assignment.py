@@ -21,7 +21,7 @@ class Assignment(Base):
     description = Column(Text, nullable=True)
     assignment_type = Column(String, nullable=True)  # e.g., "exam", "quiz", "lab report", "homework", "project", "essay", "presentation"
     due_date = Column(DateTime(timezone=True), nullable=False, index=True)
-    estimated_hours = Column(Float, default=1.0)
+    estimated_hours = Column(Float, nullable=True)  # Optional - AI can suggest if not provided
     priority = Column(Integer, default=1)  # 1=low, 2=medium, 3=high
 
     # Status

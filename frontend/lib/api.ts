@@ -132,7 +132,7 @@ export interface Assignment {
   description?: string;
   assignment_type?: string;
   due_date: string;
-  estimated_hours: number;
+  estimated_hours?: number;
   priority: number;
   completed: boolean;
   created_at: string;

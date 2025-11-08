@@ -10,7 +10,7 @@ class AssignmentBase(BaseModel):
     description: Optional[str] = Field(None, description="Detailed description of the assignment")
     assignment_type: Optional[str] = Field(None, description="Type of assignment (e.g., exam, quiz, lab report, homework, project, essay, presentation)")
     due_date: datetime = Field(..., description="When the assignment is due (timezone-aware)")
-    estimated_hours: float = Field(1.0, ge=0.1, le=100.0, description="Estimated hours to complete")
+    estimated_hours: Optional[float] = Field(None, ge=0.1, le=100.0, description="Estimated hours to complete (optional)")
     priority: int = Field(1, ge=1, le=3, description="Priority level: 1=low, 2=medium, 3=high")
 
 
