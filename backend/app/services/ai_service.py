@@ -79,7 +79,7 @@ def generate_completion(
         try:
             log_info("ai_service", "Attempting Groq API call")
             response = groq_client.chat.completions.create(
-                model="groq/compound",
+                model="llama-3.1-8b-instant",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=temperature,
                 response_format={"type": "json_object"} if response_format == "json" else {"type": "text"}
