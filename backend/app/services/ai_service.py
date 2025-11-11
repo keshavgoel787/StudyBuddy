@@ -117,7 +117,34 @@ def generate_completion(
         )
         response = model.generate_content(prompt)
         log_info("ai_service", "Gemini API call successful")
-        return response.text
+
+        # Handle different response formats
+        try:
+            # Try to access text directly
+            return response.text
+        except (TypeError, AttributeError):
+            # If that fails, try to get text from parts
+            if hasattr(response, 'parts') and response.parts:
+                text_parts = []
+                for part in response.parts:
+                    if hasattr(part, 'text'):
+                        text_parts.append(part.text)
+                if text_parts:
+                    return ''.join(text_parts)
+
+            # If all else fails, try candidates
+            if hasattr(response, 'candidates') and response.candidates:
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+                    text_parts = []
+                    for part in candidate.content.parts:
+                        if hasattr(part, 'text'):
+                            text_parts.append(part.text)
+                    if text_parts:
+                        return ''.join(text_parts)
+
+            raise Exception("Could not extract text from Gemini response")
+
     except Exception as e:
         log_error("ai_service", f"Gemini API failed: {str(e)}")
         raise Exception(f"All AI providers failed. Last error: {str(e)}")

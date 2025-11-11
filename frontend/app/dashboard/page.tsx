@@ -7,7 +7,7 @@ import { Button } from '@/components/Button';
 import { FloatingFlower } from '@/components/AnimatedFlower';
 import { EventCalendar } from '@/components/EventCalendar';
 import { Calendar, Clock, Utensils, BookOpen, Bus, Sparkles, LogOut, RefreshCw, CheckSquare, Plus, Trash2, Circle, CheckCircle2, CalendarPlus, List, CalendarDays } from 'lucide-react';
-import { getDayPlan, getAssignments, createAssignment, updateAssignment, deleteAssignment, syncAssignmentBlockToCalendar, syncBusToCalendar, createCustomEvent, deleteCalendarEvent, Assignment, AssignmentCreate, CustomEventCreate } from '@/lib/api';
+import { getDayPlan, getWeekEvents, getAssignments, createAssignment, updateAssignment, deleteAssignment, syncAssignmentBlockToCalendar, syncBusToCalendar, createCustomEvent, deleteCalendarEvent, getBusSchedule, Assignment, AssignmentCreate, CustomEventCreate, BusSchedule, BusTime } from '@/lib/api';
 import '../calendar.css';
 
 interface Event {
@@ -57,6 +57,7 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [userName, setUserName] = useState('');
   const [events, setEvents] = useState<Event[]>([]);
+  const [weekEvents, setWeekEvents] = useState<Event[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendations | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [showNewAssignmentForm, setShowNewAssignmentForm] = useState(false);
@@ -79,7 +80,8 @@ export default function Dashboard() {
     location: '',
     color_id: '9' // Default to blue
   });
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('calendar');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [busSchedule, setBusSchedule] = useState<BusSchedule | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
@@ -89,7 +91,9 @@ export default function Dashboard() {
     }
 
     loadDayPlan();
+    loadWeekEvents();
     loadAssignments();
+    loadBusSchedule();
   }, [router]);
 
   const loadDayPlan = async (forceRefresh: boolean = false) => {
@@ -107,9 +111,22 @@ export default function Dashboard() {
     }
   };
 
+  const loadWeekEvents = async () => {
+    try {
+      const data = await getWeekEvents();
+      setWeekEvents(data.events || []);
+    } catch (error: any) {
+      console.error('Failed to load week events:', error);
+      // Don't show error to user, just log it
+    }
+  };
+
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadDayPlan(true); // Force refresh when button is clicked
+    await Promise.all([
+      loadDayPlan(true),
+      loadWeekEvents()
+    ]);
   };
 
   const handleLogout = () => {
@@ -123,6 +140,15 @@ export default function Dashboard() {
       setAssignments(data);
     } catch (error: any) {
       console.error('Failed to load assignments:', error);
+    }
+  };
+
+  const loadBusSchedule = async () => {
+    try {
+      const data = await getBusSchedule();
+      setBusSchedule(data);
+    } catch (error: any) {
+      console.error('Failed to load bus schedule:', error);
     }
   };
 
@@ -229,7 +255,7 @@ export default function Dashboard() {
 
       // Auto-refresh dashboard to show synced event (lightweight - no AI regeneration)
       setRefreshing(true);
-      await loadDayPlan(false);
+      await Promise.all([loadDayPlan(false), loadWeekEvents()]);
     } catch (error: any) {
       console.error('Failed to sync assignment block:', error);
       showNotification(
@@ -260,7 +286,38 @@ export default function Dashboard() {
 
       // Auto-refresh dashboard to show synced event (lightweight - no AI regeneration)
       setRefreshing(true);
-      await loadDayPlan(false);
+      await Promise.all([loadDayPlan(false), loadWeekEvents()]);
+    } catch (error: any) {
+      console.error('Failed to sync bus:', error);
+      showNotification(
+        `Failed to sync bus: ${error.response?.data?.detail || error.message}`,
+        'error'
+      );
+    }
+  };
+
+  const handleSyncBusTime = async (busTime: BusTime) => {
+    const eventKey = `bus-${busTime.direction}-${busTime.departure_time}`;
+    if (syncedEvents.has(eventKey)) {
+      showNotification('This bus is already synced to your calendar', 'error');
+      return;
+    }
+
+    try {
+      await syncBusToCalendar(
+        busTime.direction,
+        busTime.departure_time,
+        busTime.arrival_time
+      );
+      setSyncedEvents(prev => new Set(prev).add(eventKey));
+      showNotification(
+        `${busTime.direction === 'outbound' ? 'Outbound' : 'Inbound'} bus at ${busTime.departure_label} added to Google Calendar!`,
+        'success'
+      );
+
+      // Auto-refresh dashboard to show synced event (lightweight - no AI regeneration)
+      setRefreshing(true);
+      await Promise.all([loadDayPlan(false), loadWeekEvents()]);
     } catch (error: any) {
       console.error('Failed to sync bus:', error);
       showNotification(
@@ -311,7 +368,7 @@ export default function Dashboard() {
 
       // Refresh day plan to show new event (lightweight - no AI regeneration)
       setRefreshing(true);
-      await loadDayPlan(false);
+      await Promise.all([loadDayPlan(false), loadWeekEvents()]);
     } catch (error: any) {
       console.error('Failed to create event:', error);
       showNotification(
@@ -340,7 +397,7 @@ export default function Dashboard() {
 
       // Refresh day plan to show updated schedule (lightweight - no AI regeneration)
       setRefreshing(true);
-      await loadDayPlan(false);
+      await Promise.all([loadDayPlan(false), loadWeekEvents()]);
     } catch (error: any) {
       console.error('Failed to delete event:', error);
       showNotification(
@@ -481,7 +538,7 @@ export default function Dashboard() {
               <h2 className="text-2xl font-semibold">Schedule Calendar</h2>
             </div>
             <EventCalendar
-              events={events}
+              events={weekEvents}
               onEventClick={(event) => {
                 console.log('Event clicked:', event);
                 // You could add a modal here to show event details
@@ -497,11 +554,28 @@ export default function Dashboard() {
                 <h2 className="text-2xl font-semibold">Today's Schedule</h2>
               </div>
 
-              {events.length === 0 ? (
-                <p className="text-mauve/70 italic">No events scheduled for today ✨</p>
-              ) : (
-                <div className="space-y-3">
-                  {events.map((event) => {
+              {(() => {
+                // Filter today's events from weekEvents (use local timezone, not UTC)
+                const today = new Date();
+                const todayYear = today.getFullYear();
+                const todayMonth = String(today.getMonth() + 1).padStart(2, '0');
+                const todayDay = String(today.getDate()).padStart(2, '0');
+                const todayStr = `${todayYear}-${todayMonth}-${todayDay}`;
+
+                const todaysEvents = weekEvents.filter(event => {
+                  const eventDate = new Date(event.start);
+                  const eventYear = eventDate.getFullYear();
+                  const eventMonth = String(eventDate.getMonth() + 1).padStart(2, '0');
+                  const eventDay = String(eventDate.getDate()).padStart(2, '0');
+                  const eventDateStr = `${eventYear}-${eventMonth}-${eventDay}`;
+                  return eventDateStr === todayStr;
+                });
+
+                return todaysEvents.length === 0 ? (
+                  <p className="text-mauve/70 italic">No events scheduled for today ✨</p>
+                ) : (
+                  <div className="space-y-3">
+                    {todaysEvents.map((event) => {
                     const isAssignment = event.event_type === "assignment";
                     const isCommute = event.event_type === "commute";
 
@@ -574,9 +648,10 @@ export default function Dashboard() {
                         </div>
                       </div>
                     );
-                  })}
-                </div>
-              )}
+                    })}
+                  </div>
+                );
+              })()}
             </Card>
 
             {/* Recommendations */}
@@ -614,144 +689,101 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Bus Suggestions */}
+        {/* Bus Schedule */}
         <Card variant="sage" className="mb-6">
           <div className="flex items-center gap-2 mb-4">
             <Bus className="w-6 h-6 text-sage" />
             <h2 className="text-2xl font-semibold">Bus Schedule 🚌</h2>
           </div>
 
-          {recommendations?.bus_suggestions && (
-            recommendations.bus_suggestions.morning || recommendations.bus_suggestions.evening
-          ) ? (
-            <>
-              <div className="grid md:grid-cols-2 gap-4">
-                {/* Morning Bus */}
-                {recommendations.bus_suggestions.morning && (
-                  <div className="p-4 bg-white/50 rounded-xl border border-sage/30">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">🌅</span>
-                        <h3 className="font-semibold text-lg">Morning Bus</h3>
-                      </div>
-                      <button
-                        onClick={() => handleSyncBus(recommendations.bus_suggestions!.morning!)}
-                        disabled={syncedEvents.has('bus-outbound')}
-                        className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium transition-all ${
-                          syncedEvents.has('bus-outbound')
-                            ? 'bg-green-100 text-green-700 cursor-not-allowed'
-                            : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                        }`}
-                        title={syncedEvents.has('bus-outbound') ? 'Already synced' : 'Add to Google Calendar'}
-                      >
-                        {syncedEvents.has('bus-outbound') ? (
-                          <>
-                            <CheckCircle2 className="w-3 h-3" />
-                            <span>Synced</span>
-                          </>
-                        ) : (
-                          <>
-                            <CalendarPlus className="w-3 h-3" />
-                            <span>Sync</span>
-                          </>
-                        )}
-                      </button>
+          {busSchedule ? (
+            <div className="space-y-6">
+              {/* Union Route */}
+              <div>
+                <h3 className="text-xl font-semibold mb-3 text-purple-700">Union ↔ Main & Murray</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {/* To Main & Murray */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">🏘️</span>
+                      <h4 className="font-medium">Union → Main & Murray</h4>
                     </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-mauve">Departs Main & Murray:</span>
-                        <span className="font-semibold text-sage">
-                          {recommendations.bus_suggestions!.morning!.departure_label}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-mauve">Arrives at UDC:</span>
-                        <span className="font-semibold text-sage">
-                          {recommendations.bus_suggestions!.morning!.arrival_label}
-                        </span>
-                      </div>
-                      <p className="text-sm text-mauve/70 mt-2 italic">
-                        💡 {recommendations.bus_suggestions!.morning!.reason}
-                      </p>
-                      {recommendations.bus_suggestions!.morning!.is_late_night && (
-                        <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full mt-2">
-                          🌙 Late Night Bus
-                        </span>
-                      )}
+                    <div className="space-y-2 max-h-80 overflow-y-auto">
+                      {busSchedule.union.to_main_murray.map((bus, idx) => {
+                        const eventKey = `bus-${bus.route}-${bus.direction}-${bus.departure_time}`;
+                        const isSynced = syncedEvents.has(eventKey);
+
+                        return (
+                          <div key={idx} className="p-2 bg-purple-50/50 rounded-lg border border-purple-200/50 hover:border-purple-300/50 transition-all">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 text-sm">
+                                <Clock className="w-3 h-3 text-purple-700" />
+                                <span className="font-semibold text-purple-700">{bus.departure_label}</span>
+                                <span className="text-purple-600">→</span>
+                                <span className="text-purple-600">{bus.arrival_label}</span>
+                              </div>
+                              <button
+                                onClick={() => handleSyncBusTime(bus)}
+                                disabled={isSynced}
+                                className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all ${
+                                  isSynced
+                                    ? 'bg-green-100 text-green-700 cursor-not-allowed'
+                                    : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                                }`}
+                              >
+                                {isSynced ? '✓' : '+'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                )}
 
-                {/* Evening Bus */}
-                {recommendations.bus_suggestions.evening && (
-                  <div className="p-4 bg-white/50 rounded-xl border border-sage/30">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">🌆</span>
-                        <h3 className="font-semibold text-lg">Evening Bus</h3>
-                      </div>
-                      <button
-                        onClick={() => handleSyncBus(recommendations.bus_suggestions!.evening!)}
-                        disabled={syncedEvents.has('bus-inbound')}
-                        className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium transition-all ${
-                          syncedEvents.has('bus-inbound')
-                            ? 'bg-green-100 text-green-700 cursor-not-allowed'
-                            : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                        }`}
-                        title={syncedEvents.has('bus-inbound') ? 'Already synced' : 'Add to Google Calendar'}
-                      >
-                        {syncedEvents.has('bus-inbound') ? (
-                          <>
-                            <CheckCircle2 className="w-3 h-3" />
-                            <span>Synced</span>
-                          </>
-                        ) : (
-                          <>
-                            <CalendarPlus className="w-3 h-3" />
-                            <span>Sync</span>
-                          </>
-                        )}
-                      </button>
+                  {/* From Main & Murray */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">🏡</span>
+                      <h4 className="font-medium">Main & Murray → Union</h4>
                     </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-mauve">Departs UDC:</span>
-                        <span className="font-semibold text-sage">
-                          {recommendations.bus_suggestions!.evening!.departure_label}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-mauve">Arrives Main & Murray:</span>
-                        <span className="font-semibold text-sage">
-                          {recommendations.bus_suggestions!.evening!.arrival_label}
-                        </span>
-                      </div>
-                      <p className="text-sm text-mauve/70 mt-2 italic">
-                        💡 {recommendations.bus_suggestions!.evening!.reason}
-                      </p>
-                      {recommendations.bus_suggestions!.evening!.is_late_night && (
-                        <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full mt-2">
-                          🌙 Late Night Bus
-                        </span>
-                      )}
+                    <div className="space-y-2 max-h-80 overflow-y-auto">
+                      {busSchedule.union.from_main_murray.map((bus, idx) => {
+                        const eventKey = `bus-${bus.route}-${bus.direction}-${bus.departure_time}`;
+                        const isSynced = syncedEvents.has(eventKey);
+
+                        return (
+                          <div key={idx} className="p-2 bg-purple-50/50 rounded-lg border border-purple-200/50 hover:border-purple-300/50 transition-all">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 text-sm">
+                                <Clock className="w-3 h-3 text-purple-700" />
+                                <span className="font-semibold text-purple-700">{bus.departure_label}</span>
+                                <span className="text-purple-600">→</span>
+                                <span className="text-purple-600">{bus.arrival_label}</span>
+                              </div>
+                              <button
+                                onClick={() => handleSyncBusTime(bus)}
+                                disabled={isSynced}
+                                className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all ${
+                                  isSynced
+                                    ? 'bg-green-100 text-green-700 cursor-not-allowed'
+                                    : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                                }`}
+                              >
+                                {isSynced ? '✓' : '+'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                )}
+                </div>
               </div>
-
-              <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-800">
-                  <strong>📍 Route:</strong> Westside (WS) - Main & Murray ↔ UDC
-                </p>
-              </div>
-            </>
+            </div>
           ) : (
             <div className="text-center py-8">
-              <div className="text-6xl mb-4">🏡</div>
-              <h3 className="text-xl font-semibold text-sage mb-2">No Campus Commitments Today</h3>
-              <p className="text-mauve/70">
-                All your events are remote or at home - no need to catch the bus today! Enjoy staying cozy 💚
-              </p>
+              <div className="animate-spin text-sage text-4xl mb-2">🚌</div>
+              <p className="text-mauve/70">Loading bus schedule...</p>
             </div>
           )}
         </Card>

@@ -114,6 +114,119 @@ def get_todays_events(access_token: str, refresh_token: str = None) -> List[Cale
         raise Exception(f"Failed to fetch calendar events: {str(e)}")
 
 
+def get_week_events(access_token: str, refresh_token: str = None, start_date: datetime = None) -> List[CalendarEvent]:
+    """
+    Fetch events for a week from Google Calendar (from all calendars).
+
+    Args:
+        access_token: Google OAuth access token
+        refresh_token: Google OAuth refresh token (optional)
+        start_date: Start date for the week (defaults to current week starting Sunday)
+
+    Returns:
+        List of CalendarEvent objects for the week
+    """
+    try:
+        # Build the Calendar API service
+        service = _build_calendar_service(access_token, refresh_token)
+
+        # Define EST timezone
+        est = ZoneInfo("America/New_York")
+
+        # Get the start of the week (Sunday)
+        if start_date is None:
+            now_est = datetime.now(est)
+            # Calculate days since Sunday (0 = Monday, 6 = Sunday)
+            days_since_sunday = (now_est.weekday() + 1) % 7
+            week_start = (now_est - timedelta(days=days_since_sunday)).date()
+        else:
+            week_start = start_date.date()
+
+        # Create start and end of week in EST (Sunday to Saturday)
+        week_start_est = datetime(week_start.year, week_start.month, week_start.day, 0, 0, 0, tzinfo=est)
+        week_end_date = week_start + timedelta(days=7)
+        week_end_est = datetime(week_end_date.year, week_end_date.month, week_end_date.day, 0, 0, 0, tzinfo=est)
+
+        # Convert to UTC for the API
+        week_start_utc = week_start_est.astimezone(ZoneInfo("UTC")).isoformat().replace('+00:00', 'Z')
+        week_end_utc = week_end_est.astimezone(ZoneInfo("UTC")).isoformat().replace('+00:00', 'Z')
+
+        log_info("google_calendar", f"Fetching events from {week_start_utc} to {week_end_utc}")
+
+        # Get list of all calendars
+        calendar_list = service.calendarList().list().execute()
+        calendars = calendar_list.get('items', [])
+
+        log_info("google_calendar", f"Found {len(calendars)} calendars")
+
+        all_events = []
+
+        # Fetch events from each calendar
+        for calendar in calendars:
+            calendar_id = calendar['id']
+            calendar_name = calendar.get('summary', 'Unknown')
+
+            # Skip holidays calendar
+            if 'holiday' in calendar_name.lower():
+                log_info("google_calendar", f"Skipping calendar '{calendar_name}'")
+                continue
+
+            try:
+                events_result = service.events().list(
+                    calendarId=calendar_id,
+                    timeMin=week_start_utc,
+                    timeMax=week_end_utc,
+                    singleEvents=True,
+                    orderBy='startTime'
+                ).execute()
+
+                events = events_result.get('items', [])
+                log_info("google_calendar", f"Found {len(events)} events in calendar '{calendar_name}'")
+
+                # Convert to CalendarEvent objects
+                for event in events:
+                    # Handle both dateTime and date (all-day events)
+                    start = event['start'].get('dateTime', event['start'].get('date'))
+                    end = event['end'].get('dateTime', event['end'].get('date'))
+
+                    # Parse datetime
+                    if 'T' in start:  # dateTime format
+                        start_dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                        end_dt = datetime.fromisoformat(end.replace('Z', '+00:00'))
+                    else:  # date format (all-day event) - add timezone
+                        start_dt = datetime.fromisoformat(start + 'T00:00:00').replace(tzinfo=est)
+                        end_dt = datetime.fromisoformat(end + 'T23:59:59').replace(tzinfo=est)
+
+                    all_events.append(CalendarEvent(
+                        id=event['id'],
+                        title=event.get('summary', 'Untitled Event'),
+                        location=event.get('location'),
+                        start=start_dt,
+                        end=end_dt
+                    ))
+            except Exception as e:
+                log_error("google_calendar", f"Failed to fetch events from calendar '{calendar_name}': {str(e)}")
+                # Continue with other calendars even if one fails
+
+        log_info("google_calendar", f"Total events fetched from all calendars: {len(all_events)}")
+
+        # Ensure all events have timezone-aware datetimes before sorting
+        for event in all_events:
+            if event.start.tzinfo is None:
+                event.start = event.start.replace(tzinfo=est)
+            if event.end.tzinfo is None:
+                event.end = event.end.replace(tzinfo=est)
+
+        # Sort events by start time
+        all_events.sort(key=lambda e: e.start)
+
+        return all_events
+
+    except Exception as e:
+        log_error("google_calendar", f"Failed to fetch week events: {str(e)}", e)
+        raise Exception(f"Failed to fetch calendar events: {str(e)}")
+
+
 def create_calendar_event(
     access_token: str,
     title: str,

@@ -45,6 +45,14 @@ export const getDayPlan = async (forceRefresh: boolean = false) => {
   }, 30 * 60 * 1000);
 };
 
+export const getWeekEvents = async () => {
+  // Cache week events for 10 minutes
+  return withCache('calendar:week-events', async () => {
+    const response = await api.get('/calendar/week-events');
+    return response.data;
+  }, 10 * 60 * 1000);
+};
+
 // Notes
 export const uploadNote = async (formData: FormData) => {
   const response = await api.post('/notes/upload', formData, {
@@ -249,4 +257,34 @@ export const deleteCalendarEvent = async (eventId: string): Promise<void> => {
   await api.delete(`/calendar/events/${eventId}`);
   // Invalidate calendar cache after deletion
   apiCache.invalidate('calendar:day-plan');
+};
+
+// Bus Schedule
+export interface BusTime {
+  route: 'westside' | 'union';
+  direction: 'outbound' | 'inbound';
+  departure_time: string;
+  arrival_time: string;
+  departure_label: string;
+  arrival_label: string;
+  is_late_night: boolean;
+}
+
+export interface BusSchedule {
+  westside: {
+    to_campus: BusTime[];      // Main & Murray → UDC
+    from_campus: BusTime[];    // UDC → Main & Murray
+  };
+  union: {
+    to_main_murray: BusTime[];    // Union → Main & Murray (to get back to campus)
+    from_main_murray: BusTime[];  // Main & Murray → Union (to go home)
+  };
+}
+
+export const getBusSchedule = async (): Promise<BusSchedule> => {
+  // Cache bus schedule for 1 hour (doesn't change often)
+  return withCache('bus:schedule', async () => {
+    const response = await api.get('/calendar/bus-schedule');
+    return response.data;
+  }, 60 * 60 * 1000);
 };
