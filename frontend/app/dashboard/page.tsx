@@ -5,8 +5,10 @@ import { useRouter } from 'next/navigation';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { FloatingFlower } from '@/components/AnimatedFlower';
-import { Calendar, Clock, Utensils, BookOpen, Bus, Sparkles, LogOut, RefreshCw, CheckSquare, Plus, Trash2, Circle, CheckCircle2, CalendarPlus } from 'lucide-react';
+import { EventCalendar } from '@/components/EventCalendar';
+import { Calendar, Clock, Utensils, BookOpen, Bus, Sparkles, LogOut, RefreshCw, CheckSquare, Plus, Trash2, Circle, CheckCircle2, CalendarPlus, List, CalendarDays } from 'lucide-react';
 import { getDayPlan, getAssignments, createAssignment, updateAssignment, deleteAssignment, syncAssignmentBlockToCalendar, syncBusToCalendar, createCustomEvent, deleteCalendarEvent, Assignment, AssignmentCreate, CustomEventCreate } from '@/lib/api';
+import '../calendar.css';
 
 interface Event {
   id: string;
@@ -77,6 +79,7 @@ export default function Dashboard() {
     location: '',
     color_id: '9' // Default to blue
   });
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('calendar');
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
@@ -402,6 +405,22 @@ export default function Dashboard() {
           <div className="flex gap-3">
             <Button
               variant="primary"
+              onClick={() => setViewMode(viewMode === 'list' ? 'calendar' : 'list')}
+            >
+              {viewMode === 'list' ? (
+                <>
+                  <CalendarDays className="w-4 h-4 mr-2" />
+                  Calendar View
+                </>
+              ) : (
+                <>
+                  <List className="w-4 h-4 mr-2" />
+                  List View
+                </>
+              )}
+            </Button>
+            <Button
+              variant="primary"
               onClick={() => setShowCreateEventModal(true)}
             >
               <CalendarPlus className="w-4 h-4 mr-2" />
@@ -454,129 +473,146 @@ export default function Dashboard() {
           </Card>
         )}
 
-        <div className="grid md:grid-cols-2 gap-6 mb-6">
-          {/* Today's Events */}
-          <Card className="space-y-4">
+        {/* Calendar/List View */}
+        {viewMode === 'calendar' ? (
+          <div className="mb-6">
             <div className="flex items-center gap-2 mb-4">
               <Calendar className="w-6 h-6 text-lavender" />
-              <h2 className="text-2xl font-semibold">Today's Schedule</h2>
+              <h2 className="text-2xl font-semibold">Schedule Calendar</h2>
             </div>
+            <EventCalendar
+              events={events}
+              onEventClick={(event) => {
+                console.log('Event clicked:', event);
+                // You could add a modal here to show event details
+              }}
+            />
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-6 mb-6">
+            {/* Today's Events */}
+            <Card className="space-y-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Calendar className="w-6 h-6 text-lavender" />
+                <h2 className="text-2xl font-semibold">Today's Schedule</h2>
+              </div>
 
-            {events.length === 0 ? (
-              <p className="text-mauve/70 italic">No events scheduled for today ✨</p>
-            ) : (
-              <div className="space-y-3">
-                {events.map((event) => {
-                  const isAssignment = event.event_type === "assignment";
-                  const isCommute = event.event_type === "commute";
+              {events.length === 0 ? (
+                <p className="text-mauve/70 italic">No events scheduled for today ✨</p>
+              ) : (
+                <div className="space-y-3">
+                  {events.map((event) => {
+                    const isAssignment = event.event_type === "assignment";
+                    const isCommute = event.event_type === "commute";
 
-                  return (
-                    <div
-                      key={event.id}
-                      className={`p-4 rounded-xl border relative ${
-                        isAssignment
-                          ? 'bg-purple-50/50 border-purple-300/50'
-                          : isCommute
-                          ? 'bg-blue-50/50 border-blue-300/50'
-                          : 'bg-soft-pink/30 border-rose/20'
-                      }`}
-                    >
-                      {/* Delete button in top-right corner */}
-                      <button
-                        onClick={() => handleDeleteEvent(event)}
-                        className="absolute top-2 right-2 p-1.5 rounded-lg text-mauve/60 hover:text-red-600 hover:bg-red-50 transition-all"
-                        title="Delete event from Google Calendar"
+                    return (
+                      <div
+                        key={event.id}
+                        className={`p-4 rounded-xl border relative ${
+                          isAssignment
+                            ? 'bg-purple-50/50 border-purple-300/50'
+                            : isCommute
+                            ? 'bg-blue-50/50 border-blue-300/50'
+                            : 'bg-soft-pink/30 border-rose/20'
+                        }`}
                       >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                        {/* Delete button in top-right corner */}
+                        <button
+                          onClick={() => handleDeleteEvent(event)}
+                          className="absolute top-2 right-2 p-1.5 rounded-lg text-mauve/60 hover:text-red-600 hover:bg-red-50 transition-all"
+                          title="Delete event from Google Calendar"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
 
-                      <div className="flex items-start gap-2 pr-8">
-                        {isAssignment && <span className="text-lg">📚</span>}
-                        {isCommute && <span className="text-lg">🚌</span>}
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-foreground">{event.title}</h3>
-                          <div className="flex items-center gap-2 text-sm text-mauve mt-1">
-                            <Clock className="w-4 h-4" />
-                            <span>
-                              {formatTime(event.start)} - {formatTime(event.end)}
-                            </span>
+                        <div className="flex items-start gap-2 pr-8">
+                          {isAssignment && <span className="text-lg">📚</span>}
+                          {isCommute && <span className="text-lg">🚌</span>}
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-foreground">{event.title}</h3>
+                            <div className="flex items-center gap-2 text-sm text-mauve mt-1">
+                              <Clock className="w-4 h-4" />
+                              <span>
+                                {formatTime(event.start)} - {formatTime(event.end)}
+                              </span>
+                            </div>
+                            {event.location && (
+                              <p className="text-sm text-mauve/70 mt-1">📍 {event.location}</p>
+                            )}
+                            {isAssignment && event.description && (
+                              <p className="text-xs text-purple-600 mt-1 italic">
+                                {event.description.includes('due')
+                                  ? event.description.split('Auto-scheduled study block for assignment')[1]?.trim()
+                                  : event.description}
+                              </p>
+                            )}
                           </div>
-                          {event.location && (
-                            <p className="text-sm text-mauve/70 mt-1">📍 {event.location}</p>
-                          )}
-                          {isAssignment && event.description && (
-                            <p className="text-xs text-purple-600 mt-1 italic">
-                              {event.description.includes('due')
-                                ? event.description.split('Auto-scheduled study block for assignment')[1]?.trim()
-                                : event.description}
-                            </p>
+                          {isAssignment && (
+                            <button
+                              onClick={() => handleSyncAssignmentBlock(event)}
+                              disabled={syncedEvents.has(`assignment-${event.id}`)}
+                              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                                syncedEvents.has(`assignment-${event.id}`)
+                                  ? 'bg-green-100 text-green-700 cursor-not-allowed'
+                                  : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                              }`}
+                              title={syncedEvents.has(`assignment-${event.id}`) ? 'Already synced' : 'Add to Google Calendar'}
+                            >
+                              {syncedEvents.has(`assignment-${event.id}`) ? (
+                                <>
+                                  <CheckCircle2 className="w-4 h-4" />
+                                  <span>Synced</span>
+                                </>
+                              ) : (
+                                <>
+                                  <CalendarPlus className="w-4 h-4" />
+                                  <span>Sync</span>
+                                </>
+                              )}
+                            </button>
                           )}
                         </div>
-                        {isAssignment && (
-                          <button
-                            onClick={() => handleSyncAssignmentBlock(event)}
-                            disabled={syncedEvents.has(`assignment-${event.id}`)}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                              syncedEvents.has(`assignment-${event.id}`)
-                                ? 'bg-green-100 text-green-700 cursor-not-allowed'
-                                : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
-                            }`}
-                            title={syncedEvents.has(`assignment-${event.id}`) ? 'Already synced' : 'Add to Google Calendar'}
-                          >
-                            {syncedEvents.has(`assignment-${event.id}`) ? (
-                              <>
-                                <CheckCircle2 className="w-4 h-4" />
-                                <span>Synced</span>
-                              </>
-                            ) : (
-                              <>
-                                <CalendarPlus className="w-4 h-4" />
-                                <span>Sync</span>
-                              </>
-                            )}
-                          </button>
-                        )}
                       </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+
+            {/* Recommendations */}
+            <div className="space-y-4">
+              {/* Lunch */}
+              {recommendations?.lunch_slots && recommendations.lunch_slots.length > 0 && (
+                <Card variant="peach">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Utensils className="w-6 h-6 text-peach" />
+                    <h3 className="text-xl font-semibold">Lunch Time 🍱</h3>
+                  </div>
+                  {recommendations.lunch_slots.map((slot, idx) => (
+                    <div key={idx} className="text-foreground/80">
+                      {slot.label}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </Card>
+                  ))}
+                </Card>
+              )}
 
-          {/* Recommendations */}
-          <div className="space-y-4">
-            {/* Lunch */}
-            {recommendations?.lunch_slots && recommendations.lunch_slots.length > 0 && (
-              <Card variant="peach">
-                <div className="flex items-center gap-2 mb-3">
-                  <Utensils className="w-6 h-6 text-peach" />
-                  <h3 className="text-xl font-semibold">Lunch Time 🍱</h3>
-                </div>
-                {recommendations.lunch_slots.map((slot, idx) => (
-                  <div key={idx} className="text-foreground/80">
-                    {slot.label}
+              {/* Study */}
+              {recommendations?.study_slots && recommendations.study_slots.length > 0 && (
+                <Card variant="lavender">
+                  <div className="flex items-center gap-2 mb-3">
+                    <BookOpen className="w-6 h-6 text-lavender" />
+                    <h3 className="text-xl font-semibold">Study Time 📚</h3>
                   </div>
-                ))}
-              </Card>
-            )}
-
-            {/* Study */}
-            {recommendations?.study_slots && recommendations.study_slots.length > 0 && (
-              <Card variant="lavender">
-                <div className="flex items-center gap-2 mb-3">
-                  <BookOpen className="w-6 h-6 text-lavender" />
-                  <h3 className="text-xl font-semibold">Study Time 📚</h3>
-                </div>
-                {recommendations.study_slots.map((slot, idx) => (
-                  <div key={idx} className="text-foreground/80">
-                    {slot.label}
-                  </div>
-                ))}
-              </Card>
-            )}
+                  {recommendations.study_slots.map((slot, idx) => (
+                    <div key={idx} className="text-foreground/80">
+                      {slot.label}
+                    </div>
+                  ))}
+                </Card>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Bus Suggestions */}
         <Card variant="sage" className="mb-6">
