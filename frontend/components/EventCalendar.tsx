@@ -15,6 +15,7 @@ interface CalendarEvent {
   location?: string;
   description?: string;
   event_type?: string;
+  color_id?: string;
 }
 
 interface EventCalendarProps {
@@ -26,6 +27,7 @@ interface EventCalendarProps {
     location?: string;
     description?: string;
     event_type?: string;
+    color_id?: string;
   }>;
   onEventClick?: (event: CalendarEvent) => void;
 }
@@ -43,25 +45,61 @@ export function EventCalendar({ events, onEventClick }: EventCalendarProps) {
     location: event.location,
     description: event.description,
     event_type: event.event_type,
+    color_id: event.color_id,
   }));
 
-  // Custom event styling based on event type
-  const eventStyleGetter = (event: CalendarEvent) => {
-    let backgroundColor = '#FFB3C1'; // Default rose color
-    let borderColor = '#FF85A1';
+  // Google Calendar color mappings (official colors)
+  const getGoogleCalendarColor = (colorId?: string) => {
+    const colors: { [key: string]: { bg: string; border: string; text: string } } = {
+      '1': { bg: '#a4bdfc', border: '#7da7ea', text: '#1d1d1d' },  // Lavender
+      '2': { bg: '#7ae7bf', border: '#46d6a0', text: '#1d1d1d' },  // Sage
+      '3': { bg: '#dbadff', border: '#c58af9', text: '#1d1d1d' },  // Grape
+      '4': { bg: '#ff887c', border: '#f06463', text: '#1d1d1d' },  // Flamingo
+      '5': { bg: '#fbd75b', border: '#f2c246', text: '#1d1d1d' },  // Banana
+      '6': { bg: '#ffb878', border: '#f5a449', text: '#1d1d1d' },  // Tangerine
+      '7': { bg: '#46d6db', border: '#29cccc', text: '#1d1d1d' },  // Peacock
+      '8': { bg: '#e1e1e1', border: '#cacaca', text: '#1d1d1d' },  // Graphite
+      '9': { bg: '#5484ed', border: '#3b6fd9', text: '#ffffff' },  // Blueberry
+      '10': { bg: '#51b749', border: '#3ea338', text: '#ffffff' }, // Basil
+      '11': { bg: '#dc2127', border: '#c41e23', text: '#ffffff' }, // Tomato
+    };
 
-    if (event.event_type === 'assignment') {
-      backgroundColor = '#E9D5FF'; // Purple
-      borderColor = '#C084FC';
-    } else if (event.event_type === 'commute') {
-      backgroundColor = '#BFDBFE'; // Blue
-      borderColor = '#60A5FA';
+    return colors[colorId || ''] || { bg: '#a4bdfc', border: '#7da7ea', text: '#1d1d1d' }; // Default to Lavender
+  };
+
+  // Custom event styling based on Google Calendar colors
+  const eventStyleGetter = (event: CalendarEvent) => {
+    // If event has a Google Calendar color, use it
+    if (event.color_id) {
+      const color = getGoogleCalendarColor(event.color_id);
+      return {
+        style: {
+          backgroundColor: color.bg,
+          borderColor: color.border,
+          borderWidth: '2px',
+          borderStyle: 'solid',
+          borderRadius: '8px',
+          color: color.text,
+          padding: '4px 8px',
+          fontSize: '13px',
+          fontWeight: '500',
+        }
+      };
     }
 
-    // Check if event title contains "bhangra" (case insensitive)
-    if (event.title.toLowerCase().includes('bhangra')) {
-      backgroundColor = '#FCA5A5'; // Red/pink for bhangra
-      borderColor = '#F87171';
+    // Fallback for events without color_id (assignment blocks, bus suggestions)
+    let backgroundColor = '#a4bdfc'; // Default Lavender
+    let borderColor = '#7da7ea';
+    let textColor = '#1d1d1d';
+
+    if (event.event_type === 'assignment') {
+      // Use Grape (purple) for assignments
+      backgroundColor = '#dbadff';
+      borderColor = '#c58af9';
+    } else if (event.event_type === 'commute') {
+      // Use Peacock (blue) for bus/commute
+      backgroundColor = '#46d6db';
+      borderColor = '#29cccc';
     }
 
     return {
@@ -71,7 +109,7 @@ export function EventCalendar({ events, onEventClick }: EventCalendarProps) {
         borderWidth: '2px',
         borderStyle: 'solid',
         borderRadius: '8px',
-        color: '#1f2937',
+        color: textColor,
         padding: '4px 8px',
         fontSize: '13px',
         fontWeight: '500',
@@ -162,6 +200,8 @@ export function EventCalendar({ events, onEventClick }: EventCalendarProps) {
         step={30}
         showMultiDayTimes
         popup
+        min={new Date(1970, 1, 1, 6, 0, 0)}
+        max={new Date(1970, 1, 1, 23, 59, 0)}
       />
     </div>
   );

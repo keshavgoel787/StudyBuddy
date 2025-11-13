@@ -11,6 +11,7 @@ class CalendarEvent(BaseModel):
     end: datetime
     description: Optional[str] = None
     event_type: str = "calendar"  # "calendar" | "commute" | "assignment"
+    color_id: Optional[str] = None  # Google Calendar color ID (1-11)
 
 
 class FreeBlock(BaseModel):

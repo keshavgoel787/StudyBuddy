@@ -105,7 +105,8 @@ def get_todays_events(access_token: str, refresh_token: str = None) -> List[Cale
                 title=event.get('summary', 'Untitled Event'),
                 location=event.get('location'),
                 start=start_dt,
-                end=end_dt
+                end=end_dt,
+                color_id=event.get('colorId')
             ))
 
         return calendar_events
@@ -202,7 +203,8 @@ def get_week_events(access_token: str, refresh_token: str = None, start_date: da
                         title=event.get('summary', 'Untitled Event'),
                         location=event.get('location'),
                         start=start_dt,
-                        end=end_dt
+                        end=end_dt,
+                        color_id=event.get('colorId')
                     ))
             except Exception as e:
                 log_error("google_calendar", f"Failed to fetch events from calendar '{calendar_name}': {str(e)}")
