@@ -227,8 +227,8 @@ async def get_bus_schedule(
             user_token.refresh_token
         )
 
-        # Get filtered bus schedule based on events
-        schedule = get_all_buses_for_day(db, today, events=events, filter_by_schedule=True)
+        # Get bus schedule (show all buses without filtering for now)
+        schedule = get_all_buses_for_day(db, today, events=events, filter_by_schedule=False)
         return schedule
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get bus schedule: {str(e)}")
